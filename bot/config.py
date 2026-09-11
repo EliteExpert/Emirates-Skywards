@@ -14,6 +14,54 @@ ASSET_DIR = ROOT_DIR / "assets" / "tiers"
 TIER_NAMES = ("Blue", "Silver", "Gold", "Platinum")
 TRAVEL_CLASSES = ("Economy", "Premium Economy", "Business", "First")
 
+TIER_DISPLAY_NAMES = {
+    "Blue": "Bronze",
+    "Silver": "Silver",
+    "Gold": "Gold",
+    "Platinum": "Platinum",
+}
+
+TIER_ROLE_LABELS = {
+    "Blue": "@Blue",
+    "Silver": "@Silver",
+    "Gold": "@Gold",
+    "Platinum": "@Platinum",
+}
+
+TIER_MINIMUM_MILES = {
+    "Blue": 0,
+    "Silver": 1500,
+    "Gold": 3500,
+    "Platinum": 7000,
+}
+
+TIER_BENEFITS = {
+    "Blue": (
+        "Free Wi-Fi on board",
+        "Earn and redeem Etihad miles",
+        "Priority for boarding gates",
+    ),
+    "Silver": (
+        "All benefits from Bronze",
+        "Use your miles to upgrade on selected routes",
+        "Eligible for upgrades when seats are open",
+    ),
+    "Gold": (
+        "All benefits from Silver",
+        "+30% bonus points on all Etihad PTFS flights",
+        "Access to the Business Class Lounge at the Dubai Hub",
+        "Extra baggage slots for long-haul PTFS routes",
+        "Complimentary flight upgrades for one friend per event",
+    ),
+    "Platinum": (
+        "All benefits from Gold",
+        "+75% bonus points per flight",
+        "Access to Business Class lounges worldwide",
+        "Priority baggage handling at all PTFS airports",
+        "Complimentary flight upgrades for one friend per event",
+    ),
+}
+
 TIER_MULTIPLIERS = {
     "Blue": 1.00,
     "Silver": 1.25,
@@ -86,4 +134,3 @@ class Settings:
             database_path=database_path,
             test_guild_id=test_guild_id,
         )
-

@@ -9,8 +9,12 @@ from .config import (
     CLASS_MULTIPLIERS,
     SHOP_ITEMS,
     TIER_ASSETS,
+    TIER_BENEFITS,
     TIER_COLORS,
+    TIER_DISPLAY_NAMES,
+    TIER_MINIMUM_MILES,
     TIER_MULTIPLIERS,
+    TIER_ROLE_LABELS,
 )
 
 
@@ -27,7 +31,7 @@ def account_message(
         title=f"Emirates Skywards Account — {account['display_name']}",
         description=(
             '> “Every journey starts with a destination.”\n\n'
-            f"**{tier}** member\n"
+            f"**{TIER_DISPLAY_NAMES[tier]}** member · `{TIER_ROLE_LABELS[tier]}`\n"
             "*Your Skywards profile at a glance.*"
         ),
         colour=TIER_COLORS[tier],
@@ -36,9 +40,19 @@ def account_message(
     embed.add_field(name="Skywards number", value=f"`{account['skywards_number']}`", inline=True)
     embed.add_field(name="Available miles", value=f"**{number(account['miles'])}**", inline=True)
     embed.add_field(
+        name="Tier threshold",
+        value=f"{number(TIER_MINIMUM_MILES[tier])} miles",
+        inline=True,
+    )
+    embed.add_field(
         name="Status bonus",
         value=f"{TIER_MULTIPLIERS[tier]:.2f}× event multiplier",
         inline=True,
+    )
+    embed.add_field(
+        name=f"{TIER_DISPLAY_NAMES[tier]} benefits",
+        value="\n".join(f"• {benefit}" for benefit in TIER_BENEFITS[tier]),
+        inline=False,
     )
     if inventory:
         owned = "\n".join(
@@ -56,6 +70,11 @@ def account_inventory_embed(account: dict[str, Any], inventory: list[dict[str, A
         title=f"Perks — {account['display_name']}",
         description='> “A little extra makes every journey better.”',
         colour=TIER_COLORS[account["tier"]],
+    )
+    embed.add_field(
+        name="Skywards tier",
+        value=f"**{TIER_DISPLAY_NAMES[account['tier']]}** · `{TIER_ROLE_LABELS[account['tier']]}`",
+        inline=False,
     )
     if inventory:
         for item in inventory:
@@ -126,7 +145,7 @@ def award_preview_embed(event: dict[str, Any], rows: list[dict[str, Any]]) -> di
             name=f"{index}. {row['display_name']}",
             value=(
                 f"Class: **{row['travel_class']}**\n"
-                f"Status: **{row['tier']}**\n"
+                f"Status: **{TIER_DISPLAY_NAMES[row['tier']]}** (`{TIER_ROLE_LABELS[row['tier']]}`)\n"
                 f"Projected award: **{number(calculated)} miles**"
             ),
             inline=False,
@@ -134,4 +153,3 @@ def award_preview_embed(event: dict[str, Any], rows: list[dict[str, Any]]) -> di
     if len(rows) > 25:
         embed.set_footer(text=f"Showing the first 25 of {len(rows)} passengers.")
     return embed
-

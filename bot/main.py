@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Optional
 
 import discord
@@ -11,8 +12,10 @@ from discord.ext import commands
 from .config import (
     CLASS_MULTIPLIERS,
     Settings,
+    TIER_DISPLAY_NAMES,
     TIER_MULTIPLIERS,
     TIER_NAMES,
+    TIER_ROLE_LABELS,
     TRAVEL_CLASSES,
 )
 from .database import Database
@@ -65,6 +68,13 @@ account_group = app_commands.Group(name="account", description="Create and manag
 event_group = app_commands.Group(name="event", description="Create and manage PTFS events")
 
 
+def parse_event_id(value: str) -> int | None:
+    """Accept a numeric ID copied from an event card or event list."""
+    cleaned = value.strip().strip("`")
+    match = re.match(r"^(?:event[\s_-]*)?#?(\d+)\b", cleaned, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
 @account_group.command(name="create", description="Create your Emirates Skywards account")
 @app_commands.guild_only()
 async def account_create(interaction: discord.Interaction) -> None:
@@ -77,7 +87,7 @@ async def account_create(interaction: discord.Interaction) -> None:
         return
     account = await bot.db.create_account(interaction.user.id, interaction.user.display_name)
     embed, file = account_message(account, [])
-    await interaction.response.send_message(embed=embed, file=file, view=AccountView(bot.db), ephemeral=True)
+    await interaction.response.send_message(embed=embed, file=file, view=AccountView(bot.db))
 
 
 @account_group.command(name="view", description="View a Skywards account")
@@ -93,7 +103,7 @@ async def account_view(interaction: discord.Interaction, member: Optional[discor
         )
         return
     embed, file = account_message(account, await bot.db.get_inventory(target.id))
-    await interaction.response.send_message(embed=embed, file=file, view=AccountView(bot.db), ephemeral=True)
+    await interaction.response.send_message(embed=embed, file=file, view=AccountView(bot.db))
 
 
 @account_group.command(name="inventory", description="View your purchased Skywards perks")
@@ -108,14 +118,21 @@ async def account_inventory(interaction: discord.Interaction) -> None:
         return
     await interaction.response.send_message(
         embed=account_inventory_embed(account, await bot.db.get_inventory(interaction.user.id)),
-        ephemeral=True,
     )
 
 
 @account_group.command(name="set-tier", description="Set a member's Skywards tier")
 @app_commands.guild_only()
 @app_commands.checks.has_permissions(manage_guild=True)
-@app_commands.choices(tier=[app_commands.Choice(name=tier, value=tier) for tier in TIER_NAMES])
+@app_commands.choices(
+    tier=[
+        app_commands.Choice(
+            name=f"{TIER_DISPLAY_NAMES[tier]} ({TIER_ROLE_LABELS[tier]})",
+            value=tier,
+        )
+        for tier in TIER_NAMES
+    ]
+)
 async def account_set_tier(
     interaction: discord.Interaction,
     member: discord.Member,
@@ -130,7 +147,8 @@ async def account_set_tier(
         return
     await bot.db.update_tier(member.id, tier.value)
     await interaction.response.send_message(
-        f"**{member.display_name}** is now a **{tier.value}** member.",
+        f"**{member.display_name}** is now a **{TIER_DISPLAY_NAMES[tier.value]}** member "
+        f"(`{TIER_ROLE_LABELS[tier.value]}`).",
         ephemeral=True,
     )
 
@@ -206,12 +224,19 @@ async def event_list(interaction: discord.Interaction) -> None:
 @event_group.command(name="interested", description="View members interested in an event")
 @app_commands.guild_only()
 @app_commands.checks.has_permissions(manage_guild=True)
-async def event_interested(interaction: discord.Interaction, event_id: int) -> None:
-    event = await bot.db.get_event(event_id)
+async def event_interested(interaction: discord.Interaction, event_id: str) -> None:
+    parsed_event_id = parse_event_id(event_id)
+    if parsed_event_id is None:
+        await interaction.response.send_message(
+            "Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.",
+            ephemeral=True,
+        )
+        return
+    event = await bot.db.get_event(parsed_event_id)
     if event is None or event["guild_id"] != interaction.guild_id:
         await interaction.response.send_message("No event with that ID exists in this server.", ephemeral=True)
         return
-    rows = await bot.db.list_interest(event_id)
+    rows = await bot.db.list_interest(parsed_event_id)
     if not rows:
         await interaction.response.send_message(
             f"No one has clicked interested for **{event['name']}** yet.", ephemeral=True
@@ -225,14 +250,21 @@ async def event_interested(interaction: discord.Interaction, event_id: int) -> N
 @app_commands.checks.has_permissions(manage_guild=True)
 async def event_award(
     interaction: discord.Interaction,
-    event_id: int,
+    event_id: str,
     confirm: bool = False,
 ) -> None:
-    event = await bot.db.get_event(event_id)
+    parsed_event_id = parse_event_id(event_id)
+    if parsed_event_id is None:
+        await interaction.response.send_message(
+            "Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.",
+            ephemeral=True,
+        )
+        return
+    event = await bot.db.get_event(parsed_event_id)
     if event is None or event["guild_id"] != interaction.guild_id:
         await interaction.response.send_message("No event with that ID exists in this server.", ephemeral=True)
         return
-    rows = await bot.db.list_interest(event_id)
+    rows = await bot.db.list_interest(parsed_event_id)
     if not rows:
         await interaction.response.send_message("There are no interested members to award.", ephemeral=True)
         return
@@ -243,7 +275,7 @@ async def event_award(
             ephemeral=True,
         )
         return
-    result = await bot.db.award_event(event_id, CLASS_MULTIPLIERS, TIER_MULTIPLIERS)
+    result = await bot.db.award_event(parsed_event_id, CLASS_MULTIPLIERS, TIER_MULTIPLIERS)
     if result["status"] == "already_awarded":
         await interaction.response.send_message("Miles for this event have already been awarded.", ephemeral=True)
         return
