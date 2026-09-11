@@ -63,6 +63,11 @@ python -m bot.main
 
 The SQLite database is created at `data/skywards.sqlite3` by default.
 
+## Railpack / Railway
+
+The repository includes `railpack.json`, which starts the worker with `python -m bot.main`.
+Add `DISCORD_TOKEN` to the service variables before deploying. `TEST_GUILD_ID` is optional and is useful for immediate command sync during development.
+
 ## Staff workflow
 
 1. A member runs `/account create`.
@@ -70,4 +75,3 @@ The SQLite database is created at `data/skywards.sqlite3` by default.
 3. Members click **I'm Interested** and select their travel class.
 4. Staff use `/event interested event_id` to review registrations.
 5. Staff run `/event award event_id confirm:True` once the event is complete.
-
