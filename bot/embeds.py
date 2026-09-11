@@ -31,7 +31,7 @@ def account_message(
         title=f"Emirates Skywards Account — {account['display_name']}",
         description=(
             '> “Every journey starts with a destination.”\n\n'
-            f"**{TIER_DISPLAY_NAMES[tier]}** member · `{TIER_ROLE_LABELS[tier]}`\n"
+            f"**{TIER_DISPLAY_NAMES[tier]}** member · {TIER_ROLE_LABELS[tier]}\n"
             "*Your Skywards profile at a glance.*"
         ),
         colour=TIER_COLORS[tier],
@@ -73,7 +73,7 @@ def account_inventory_embed(account: dict[str, Any], inventory: list[dict[str, A
     )
     embed.add_field(
         name="Skywards tier",
-        value=f"**{TIER_DISPLAY_NAMES[account['tier']]}** · `{TIER_ROLE_LABELS[account['tier']]}`",
+        value=f"**{TIER_DISPLAY_NAMES[account['tier']]}** · {TIER_ROLE_LABELS[account['tier']]}",
         inline=False,
     )
     if inventory:
@@ -145,11 +145,37 @@ def award_preview_embed(event: dict[str, Any], rows: list[dict[str, Any]]) -> di
             name=f"{index}. {row['display_name']}",
             value=(
                 f"Class: **{row['travel_class']}**\n"
-                f"Status: **{TIER_DISPLAY_NAMES[row['tier']]}** (`{TIER_ROLE_LABELS[row['tier']]}`)\n"
+                f"Status: **{TIER_DISPLAY_NAMES[row['tier']]}** ({TIER_ROLE_LABELS[row['tier']]})\n"
                 f"Projected award: **{number(calculated)} miles**"
             ),
             inline=False,
         )
     if len(rows) > 25:
         embed.set_footer(text=f"Showing the first 25 of {len(rows)} passengers.")
+    return embed
+
+
+def scheduled_event_preview_embed(event: discord.ScheduledEvent, rows: list[dict[str, Any]]) -> discord.Embed:
+    description = event.description or "No description was provided for this Discord event."
+    embed = discord.Embed(
+        title=f"Discord event attendees — {event.name}",
+        description=(
+            f"> “{description}”\n\n"
+            f"Event ID: `{event.id}`\n"
+            f"Discord interest count: **{event.user_count or len(rows)}**"
+        ),
+        colour=0x315B9A,
+    )
+    for index, row in enumerate(rows[:25], start=1):
+        if row["tier"]:
+            status = f"{TIER_DISPLAY_NAMES[row['tier']]} ({TIER_ROLE_LABELS[row['tier']]})"
+        else:
+            status = "No Skywards account"
+        embed.add_field(
+            name=f"{index}. {row['display_name']}",
+            value=f"User ID: `{row['user_id']}`\nStatus: **{status}**",
+            inline=False,
+        )
+    if len(rows) > 25:
+        embed.set_footer(text=f"Showing the first 25 of {len(rows)} attendees.")
     return embed

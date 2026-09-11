@@ -22,10 +22,10 @@ TIER_DISPLAY_NAMES = {
 }
 
 TIER_ROLE_LABELS = {
-    "Blue": "@Blue",
-    "Silver": "@Silver",
-    "Gold": "@Gold",
-    "Platinum": "@Platinum",
+    "Blue": "<@&1315217374705618995>",
+    "Silver": "<@&1315217584890712104>",
+    "Gold": "<@&1315217736292372480>",
+    "Platinum": "<@&1315217903892566046>",
 }
 
 TIER_MINIMUM_MILES = {
@@ -38,7 +38,7 @@ TIER_MINIMUM_MILES = {
 TIER_BENEFITS = {
     "Blue": (
         "Free Wi-Fi on board",
-        "Earn and redeem Etihad miles",
+        "Earn and redeem Emirates miles",
         "Priority for boarding gates",
     ),
     "Silver": (
@@ -48,7 +48,7 @@ TIER_BENEFITS = {
     ),
     "Gold": (
         "All benefits from Silver",
-        "+30% bonus points on all Etihad PTFS flights",
+        "+30% bonus points on all Emirates PTFS flights",
         "Access to the Business Class Lounge at the Dubai Hub",
         "Extra baggage slots for long-haul PTFS routes",
         "Complimentary flight upgrades for one friend per event",
@@ -117,20 +117,15 @@ SHOP_ITEMS = {
 @dataclass(frozen=True)
 class Settings:
     token: str | None
-    database_path: Path
+    database_url: str | None
     test_guild_id: int | None
 
     @classmethod
     def from_environment(cls) -> "Settings":
-        database_value = os.getenv("DATABASE_PATH", "data/skywards.sqlite3")
-        database_path = Path(database_value)
-        if not database_path.is_absolute():
-            database_path = ROOT_DIR / database_path
-
         test_guild_value = os.getenv("TEST_GUILD_ID", "").strip()
         test_guild_id = int(test_guild_value) if test_guild_value else None
         return cls(
             token=os.getenv("DISCORD_TOKEN"),
-            database_path=database_path,
+            database_url=os.getenv("DATABASE_URL"),
             test_guild_id=test_guild_id,
         )

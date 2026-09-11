@@ -20,6 +20,8 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/event interested` shows the people registered for an event, their class, tier, and projected award.
 - `/event award` calculates and grants miles once per event using both travel class and Skywards tier.
 - `/event list` lists recent event IDs and interest counts.
+- `/miles flight` grants miles to one member for a completed flight and records the flight reference.
+- `/miles event` grants miles to a bot-created event or a native Discord scheduled event.
 - `/shop` displays interactive purchase buttons for PTFS perks.
 
 ## Award calculation
@@ -61,17 +63,19 @@ python -m pip install -e .
 python -m bot.main
 ```
 
-The SQLite database is created at `data/skywards.sqlite3` by default.
+The bot uses PostgreSQL through `DATABASE_URL`, so accounts, event registrations, purchases, and award history survive redeployments.
 
 ## Railpack / Railway
 
 The repository includes `railpack.json`, which starts the worker with `python -m bot.main`, and `requirements.txt`, which Railpack uses to install the bot dependencies.
-Add `DISCORD_TOKEN` to the service variables before deploying. `TEST_GUILD_ID` is optional and is useful for immediate command sync during development.
+Add `DISCORD_TOKEN` and `DATABASE_URL` to the service variables before deploying. In Railway, add a PostgreSQL service and link its `DATABASE_URL` to the bot service. `TEST_GUILD_ID` is optional and is useful for immediate command sync during development.
+
+The bot also reads native Discord scheduled events created by other users. Enable the **Server Members Intent** and **Guild Scheduled Events Intent** for the bot in the Discord Developer Portal so it can read event subscribers.
 
 ## Staff workflow
 
 1. A member runs `/account create`.
 2. A staff member posts an event with `/event create`.
 3. Members click **I'm Interested** and select their travel class.
-4. Staff use `/event interested event_id` to review registrations.
-5. Staff run `/event award event_id confirm:True` once the event is complete.
+4. Staff use `/event interested event_id` to review registrations from either bot events or native Discord scheduled events.
+5. Staff run `/miles event event_id` to preview an award, then run it again with `confirm:True` once the event is complete.

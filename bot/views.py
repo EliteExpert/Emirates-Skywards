@@ -5,7 +5,7 @@ from typing import Any
 
 import discord
 
-from .config import SHOP_ITEMS, TRAVEL_CLASSES
+from .config import TIER_DISPLAY_NAMES, TIER_MINIMUM_MILES, TIER_NAMES, SHOP_ITEMS, TRAVEL_CLASSES
 from .embeds import account_inventory_embed, account_message, event_embed, shop_embed
 
 
@@ -55,6 +55,41 @@ class AccountView(discord.ui.View):
     )
     async def shop(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
         await interaction.response.edit_message(embed=shop_embed(), attachments=[], view=ShopView(self.db))
+
+    @discord.ui.button(
+        label="Upgrade to Next Tier",
+        style=discord.ButtonStyle.success,
+        custom_id="account:upgrade",
+        row=1,
+    )
+    async def upgrade(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        account = await self.db.get_account(interaction.user.id)
+        if account is None:
+            await interaction.response.send_message(
+                "You do not have a Skywards account yet. Use `/account create` first.",
+                ephemeral=True,
+            )
+            return
+        current_index = TIER_NAMES.index(account["tier"])
+        if current_index == len(TIER_NAMES) - 1:
+            await interaction.response.send_message(
+                "You already have the highest Skywards tier.",
+                ephemeral=True,
+            )
+            return
+        next_tier = TIER_NAMES[current_index + 1]
+        required_miles = TIER_MINIMUM_MILES[next_tier]
+        if account["miles"] < required_miles:
+            await interaction.response.send_message(
+                f"You need **{required_miles:,} miles** to upgrade to "
+                f"**{TIER_DISPLAY_NAMES[next_tier]}**. Your balance is **{account['miles']:,} miles**.",
+                ephemeral=True,
+            )
+            return
+        await self.db.update_tier(account["user_id"], next_tier)
+        refreshed = await self.db.get_account(account["user_id"])
+        embed, file = account_message(refreshed, await self.db.get_inventory(account["user_id"]))
+        await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
 
 
 class InterestClassSelect(discord.ui.Select):
