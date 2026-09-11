@@ -21,7 +21,7 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/event award` calculates and grants miles once per event using both travel class and Skywards tier.
 - `/event list` lists recent event IDs and interest counts.
 - `/miles flight` grants miles to one member for a completed flight and records the flight reference.
-- `/miles event` grants miles to a bot-created event or a native Discord scheduled event.
+- `/miles event` reads the interested members of a bot-created event or native Discord scheduled event, then grants each attendee a personalized award.
 - `/shop` displays interactive purchase buttons for PTFS perks.
 
 ## Award calculation
@@ -44,9 +44,11 @@ Skywards-tier multipliers:
 | Tier | Multiplier |
 | --- | ---: |
 | Blue | 1.00× |
-| Silver | 1.25× |
-| Gold | 1.50× |
-| Platinum | 2.00× |
+| Silver | 1.00× |
+| Gold | 1.30× |
+| Platinum | 1.75× |
+
+For native Discord scheduled events, `/miles event` uses **1,000 base miles** unless another value is supplied. The attendee's Economy, Business, or First role determines their cabin multiplier; without one of those roles, the command's optional fallback class is used. The Blue, Silver, Gold, or Platinum role determines the tier multiplier, falling back to the saved account tier when no tier role is present. This keeps the event awards aligned with the shop prices, which range from **2,000** to **8,000 miles**.
 
 ## Setup
 
@@ -78,4 +80,4 @@ The bot also reads native Discord scheduled events created by other users. Enabl
 2. A staff member posts an event with `/event create`.
 3. Members click **I'm Interested** and select their travel class.
 4. Staff use `/event interested event_id` to review registrations from either bot events or native Discord scheduled events.
-5. Staff run `/miles event event_id` to preview an award, then run it again with `confirm:True` once the event is complete.
+5. Staff run `/miles event event_id` to preview the role-based awards, then run it again with `confirm:True` once the event is complete. For native Discord events, the base award defaults to 1,000 miles.

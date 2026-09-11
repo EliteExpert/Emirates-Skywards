@@ -308,6 +308,8 @@ class Database:
         event_id: int,
         class_multipliers: dict[str, float],
         tier_multipliers: dict[str, float],
+        class_overrides: dict[int, str] | None = None,
+        tier_overrides: dict[int, str] | None = None,
     ) -> dict[str, Any]:
         async with self._pool().acquire() as connection:
             async with connection.transaction():
@@ -331,18 +333,21 @@ class Database:
                 )
                 awards: list[dict[str, Any]] = []
                 for row in interested:
+                    user_id = int(row["user_id"])
+                    travel_class = (class_overrides or {}).get(user_id, row["travel_class"])
+                    tier = (tier_overrides or {}).get(user_id, row["tier"])
                     miles = max(
                         1,
                         round(
                             event_row["base_miles"]
-                            * class_multipliers[row["travel_class"]]
-                            * tier_multipliers[row["tier"]]
+                            * class_multipliers[travel_class]
+                            * tier_multipliers[tier]
                         ),
                     )
                     await connection.execute(
                         "UPDATE accounts SET miles = miles + $1 WHERE user_id = $2",
                         miles,
-                        row["user_id"],
+                        user_id,
                     )
                     await connection.execute(
                         """
@@ -351,18 +356,18 @@ class Database:
                         VALUES ($1, NULL, $2, $3, $4, $5, $6)
                         """,
                         event_id,
-                        row["user_id"],
+                        user_id,
                         miles,
-                        row["travel_class"],
-                        row["tier"],
+                        travel_class,
+                        tier,
                         utc_now(),
                     )
                     awards.append(
                         {
-                            "user_id": row["user_id"],
+                            "user_id": user_id,
                             "miles": miles,
-                            "travel_class": row["travel_class"],
-                            "tier": row["tier"],
+                            "travel_class": travel_class,
+                            "tier": tier,
                         }
                     )
 
@@ -375,10 +380,9 @@ class Database:
         self,
         external_event_id: int,
         base_miles: int,
-        travel_class: str,
         class_multipliers: dict[str, float],
         tier_multipliers: dict[str, float],
-        user_ids: list[int],
+        profiles: list[dict[str, Any]],
     ) -> dict[str, Any]:
         async with self._pool().acquire() as connection:
             async with connection.transaction():
@@ -391,19 +395,26 @@ class Database:
 
                 awards: list[dict[str, Any]] = []
                 missing_accounts = 0
-                for user_id in dict.fromkeys(user_ids):
+                seen_user_ids: set[int] = set()
+                for profile in profiles:
+                    user_id = int(profile["user_id"])
+                    if user_id in seen_user_ids:
+                        continue
+                    seen_user_ids.add(user_id)
                     account = await connection.fetchrow(
                         "SELECT tier FROM accounts WHERE user_id = $1 FOR UPDATE", user_id
                     )
                     if account is None:
                         missing_accounts += 1
                         continue
+                    travel_class = str(profile.get("travel_class") or "Economy")
+                    tier = str(profile.get("tier") or account["tier"])
                     miles = max(
                         1,
                         round(
                             base_miles
                             * class_multipliers[travel_class]
-                            * tier_multipliers[account["tier"]]
+                            * tier_multipliers[tier]
                         ),
                     )
                     await connection.execute(
@@ -419,10 +430,17 @@ class Database:
                         user_id,
                         miles,
                         travel_class,
-                        account["tier"],
+                        tier,
                         utc_now(),
                     )
-                    awards.append({"user_id": user_id, "miles": miles, "tier": account["tier"]})
+                    awards.append(
+                        {
+                            "user_id": user_id,
+                            "miles": miles,
+                            "travel_class": travel_class,
+                            "tier": tier,
+                        }
+                    )
 
                 await connection.execute(
                     "INSERT INTO external_event_awards (event_id, awarded_at) VALUES ($1, $2)",

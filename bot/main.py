@@ -11,12 +11,15 @@ from discord.ext import commands
 
 from .config import (
     CLASS_MULTIPLIERS,
+    DEFAULT_EVENT_BASE_MILES,
     Settings,
     TIER_DISPLAY_NAMES,
     TIER_MULTIPLIERS,
     TIER_NAMES,
+    TIER_ROLE_IDS,
     TIER_ROLE_LABELS,
     TRAVEL_CLASSES,
+    TRAVEL_CLASS_ROLE_IDS,
 )
 from .database import Database
 from .embeds import (
@@ -87,15 +90,67 @@ async def fetch_discord_event(guild: discord.Guild, event_id: int) -> discord.Sc
         return None
 
 
-async def fetch_discord_event_rows(event: discord.ScheduledEvent) -> list[dict[str, object]]:
+def resolve_travel_class(role_ids: set[int], fallback: str = "Economy") -> str:
+    """Use the highest cabin role present, falling back to the event selection."""
+    for travel_class in ("First", "Business", "Economy"):
+        if TRAVEL_CLASS_ROLE_IDS[travel_class] in role_ids:
+            return travel_class
+    return fallback if fallback in TRAVEL_CLASSES else "Economy"
+
+
+def resolve_tier(role_ids: set[int], fallback: str | None) -> str | None:
+    """Use the highest Skywards role present, falling back to the saved account tier."""
+    for tier in ("Platinum", "Gold", "Silver", "Blue"):
+        if TIER_ROLE_IDS[tier] in role_ids:
+            return tier
+    return fallback
+
+
+async def get_member_role_ids(guild: discord.Guild, user_id: int) -> set[int]:
+    member = guild.get_member(user_id)
+    if member is None:
+        try:
+            member = await guild.fetch_member(user_id)
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+            return set()
+    return {role.id for role in member.roles}
+
+
+async def apply_role_profiles(
+    guild: discord.Guild, rows: list[dict[str, object]]
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Apply current Discord class/tier roles while preserving account fallbacks."""
+    class_overrides: dict[int, str] = {}
+    tier_overrides: dict[int, str] = {}
+    for row in rows:
+        user_id = int(row["user_id"])
+        role_ids = await get_member_role_ids(guild, user_id)
+        row["travel_class"] = resolve_travel_class(
+            role_ids, str(row.get("travel_class") or "Economy")
+        )
+        fallback_tier = str(row["tier"]) if row.get("tier") else None
+        row["tier"] = resolve_tier(role_ids, fallback_tier)
+        class_overrides[user_id] = str(row["travel_class"])
+        if row["tier"]:
+            tier_overrides[user_id] = str(row["tier"])
+    return class_overrides, tier_overrides
+
+
+async def fetch_discord_event_rows(
+    guild: discord.Guild,
+    event: discord.ScheduledEvent,
+    fallback_class: str = "Economy",
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     async for user in event.users(limit=None):
         account = await bot.db.get_account(user.id)
+        role_ids = await get_member_role_ids(guild, user.id)
         rows.append(
             {
                 "user_id": user.id,
                 "display_name": getattr(user, "display_name", user.name),
-                "tier": account["tier"] if account else None,
+                "travel_class": resolve_travel_class(role_ids, fallback_class),
+                "tier": resolve_tier(role_ids, account["tier"] if account else None),
             }
         )
     return rows
@@ -241,7 +296,7 @@ async def event_list(interaction: discord.Interaction) -> None:
         return
     embed = discord.Embed(
         title="Emirates PTFS Events",
-        description="Use the event ID with `/event interested` or `/event award`.",
+        description="Use the event ID with `/event interested` or `/miles event`.",
         colour=0x315B9A,
     )
     for event in events[-20:]:
@@ -276,6 +331,7 @@ async def event_interested(interaction: discord.Interaction, event_id: str) -> N
                 f"No one has clicked interested for **{event['name']}** yet.", ephemeral=True
             )
             return
+        await apply_role_profiles(interaction.guild, rows)
         await interaction.response.send_message(embed=award_preview_embed(event, rows), ephemeral=True)
         return
 
@@ -286,7 +342,7 @@ async def event_interested(interaction: discord.Interaction, event_id: str) -> N
             ephemeral=True,
         )
         return
-    rows = await fetch_discord_event_rows(discord_event)
+    rows = await fetch_discord_event_rows(interaction.guild, discord_event)
     if not rows:
         await interaction.response.send_message(
             f"No one has clicked interested for **{discord_event.name}** yet.", ephemeral=True
@@ -321,6 +377,7 @@ async def event_award(
     if not rows:
         await interaction.response.send_message("There are no interested members to award.", ephemeral=True)
         return
+    class_overrides, tier_overrides = await apply_role_profiles(interaction.guild, rows)
     if not confirm:
         await interaction.response.send_message(
             embed=award_preview_embed(event, rows),
@@ -328,7 +385,13 @@ async def event_award(
             ephemeral=True,
         )
         return
-    result = await bot.db.award_event(parsed_event_id, CLASS_MULTIPLIERS, TIER_MULTIPLIERS)
+    result = await bot.db.award_event(
+        parsed_event_id,
+        CLASS_MULTIPLIERS,
+        TIER_MULTIPLIERS,
+        class_overrides,
+        tier_overrides,
+    )
     if result["status"] == "already_awarded":
         await interaction.response.send_message("Miles for this event have already been awarded.", ephemeral=True)
         return
@@ -375,7 +438,7 @@ async def miles_flight(
 async def miles_event(
     interaction: discord.Interaction,
     event_id: str,
-    base_miles: Optional[int] = None,
+    base_miles: Optional[int] = DEFAULT_EVENT_BASE_MILES,
     travel_class: Optional[app_commands.Choice[str]] = None,
     confirm: bool = False,
 ) -> None:
@@ -393,6 +456,7 @@ async def miles_event(
         if not rows:
             await interaction.response.send_message("There are no interested members to award.", ephemeral=True)
             return
+        class_overrides, tier_overrides = await apply_role_profiles(interaction.guild, rows)
         if not confirm:
             await interaction.response.send_message(
                 embed=award_preview_embed(bot_event, rows),
@@ -400,7 +464,13 @@ async def miles_event(
                 ephemeral=True,
             )
             return
-        result = await bot.db.award_event(parsed_event_id, CLASS_MULTIPLIERS, TIER_MULTIPLIERS)
+        result = await bot.db.award_event(
+            parsed_event_id,
+            CLASS_MULTIPLIERS,
+            TIER_MULTIPLIERS,
+            class_overrides,
+            tier_overrides,
+        )
         if result["status"] == "already_awarded":
             await interaction.response.send_message(
                 "Miles for this event have already been awarded.", ephemeral=True
@@ -421,14 +491,15 @@ async def miles_event(
             ephemeral=True,
         )
         return
-    if base_miles is None or not 1 <= base_miles <= 1_000_000:
+    award_base_miles = DEFAULT_EVENT_BASE_MILES if base_miles is None else base_miles
+    if not 1 <= award_base_miles <= 1_000_000:
         await interaction.response.send_message(
-            "For a Discord scheduled event, enter `base_miles` between 1 and 1,000,000.",
+            "For a Discord scheduled event, `base_miles` must be between 1 and 1,000,000.",
             ephemeral=True,
         )
         return
     selected_class = travel_class.value if travel_class else "Economy"
-    rows = await fetch_discord_event_rows(discord_event)
+    rows = await fetch_discord_event_rows(interaction.guild, discord_event, selected_class)
     if not rows:
         await interaction.response.send_message(
             f"No one has clicked interested for **{discord_event.name}** yet.", ephemeral=True
@@ -436,9 +507,10 @@ async def miles_event(
         return
     if not confirm:
         await interaction.response.send_message(
-            embed=scheduled_event_preview_embed(discord_event, rows),
+            embed=scheduled_event_preview_embed(discord_event, rows, award_base_miles),
             content=(
-                f"Base miles: **{base_miles:,}** · Class: **{selected_class}**\n"
+                f"Base miles: **{award_base_miles:,}** · Fallback class: **{selected_class}**\n"
+                "Class and tier roles override the fallback for each attendee.\n"
                 "Set `confirm` to **True** to award miles to attendees with Skywards accounts."
             ),
             ephemeral=True,
@@ -446,11 +518,10 @@ async def miles_event(
         return
     result = await bot.db.award_external_event(
         parsed_event_id,
-        base_miles,
-        selected_class,
+        award_base_miles,
         CLASS_MULTIPLIERS,
         TIER_MULTIPLIERS,
-        [int(row["user_id"]) for row in rows],
+        rows,
     )
     if result["status"] == "already_awarded":
         await interaction.response.send_message(

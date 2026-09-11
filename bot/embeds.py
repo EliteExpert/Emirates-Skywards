@@ -155,7 +155,11 @@ def award_preview_embed(event: dict[str, Any], rows: list[dict[str, Any]]) -> di
     return embed
 
 
-def scheduled_event_preview_embed(event: discord.ScheduledEvent, rows: list[dict[str, Any]]) -> discord.Embed:
+def scheduled_event_preview_embed(
+    event: discord.ScheduledEvent,
+    rows: list[dict[str, Any]],
+    base_miles: int | None = None,
+) -> discord.Embed:
     description = event.description or "No description was provided for this Discord event."
     embed = discord.Embed(
         title=f"Discord event attendees — {event.name}",
@@ -171,11 +175,20 @@ def scheduled_event_preview_embed(event: discord.ScheduledEvent, rows: list[dict
             status = f"{TIER_DISPLAY_NAMES[row['tier']]} ({TIER_ROLE_LABELS[row['tier']]})"
         else:
             status = "No Skywards account"
-        embed.add_field(
-            name=f"{index}. {row['display_name']}",
-            value=f"User ID: `{row['user_id']}`\nStatus: **{status}**",
-            inline=False,
-        )
+        lines = [
+            f"User ID: `{row['user_id']}`",
+            f"Class: **{row.get('travel_class', 'Economy')}**",
+            f"Status: **{status}**",
+        ]
+        if base_miles is not None and row["tier"]:
+            travel_class = str(row.get("travel_class") or "Economy")
+            calculated = round(
+                base_miles
+                * CLASS_MULTIPLIERS[travel_class]
+                * TIER_MULTIPLIERS[row["tier"]]
+            )
+            lines.append(f"Projected award: **{number(calculated)} miles**")
+        embed.add_field(name=f"{index}. {row['display_name']}", value="\n".join(lines), inline=False)
     if len(rows) > 25:
         embed.set_footer(text=f"Showing the first 25 of {len(rows)} attendees.")
     return embed
