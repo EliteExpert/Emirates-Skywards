@@ -65,7 +65,7 @@ The SQLite database is created at `data/skywards.sqlite3` by default.
 
 ## Railpack / Railway
 
-The repository includes `railpack.json`, which starts the worker with `python -m bot.main`.
+The repository includes `railpack.json`, which starts the worker with `python -m bot.main`, and `requirements.txt`, which Railpack uses to install the bot dependencies.
 Add `DISCORD_TOKEN` to the service variables before deploying. `TEST_GUILD_ID` is optional and is useful for immediate command sync during development.
 
 ## Staff workflow
