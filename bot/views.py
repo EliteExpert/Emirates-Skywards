@@ -232,9 +232,36 @@ class ShopButton(discord.ui.Button):
         )
 
 
+class ShopBackButton(discord.ui.Button):
+    def __init__(self, db: Any):
+        super().__init__(
+            label="Back to Account",
+            style=discord.ButtonStyle.secondary,
+            custom_id="shop:back",
+            row=2,
+        )
+        self.db = db
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        account = await self.db.get_account(interaction.user.id)
+        if account is None:
+            await interaction.response.send_message(
+                "You do not have a Skywards account yet. Use `/account create` first.",
+                ephemeral=True,
+            )
+            return
+        embed, file = account_message(account, await self.db.get_inventory(interaction.user.id))
+        await interaction.response.edit_message(
+            embed=embed,
+            attachments=[file],
+            view=AccountView(self.db),
+        )
+
+
 class ShopView(discord.ui.View):
     def __init__(self, db: Any):
         super().__init__(timeout=None)
         self.db = db
         for index, product_id in enumerate(SHOP_ITEMS):
             self.add_item(ShopButton(db, product_id, index // 2))
+        self.add_item(ShopBackButton(db))
