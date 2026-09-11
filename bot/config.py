@@ -64,9 +64,9 @@ TIER_BENEFITS = {
 
 TIER_MULTIPLIERS = {
     "Blue": 1.00,
-    "Silver": 1.25,
-    "Gold": 1.50,
-    "Platinum": 2.00,
+    "Silver": 1.00,
+    "Gold": 1.30,
+    "Platinum": 1.75,
 }
 
 CLASS_MULTIPLIERS = {
