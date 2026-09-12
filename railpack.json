@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.railpack.com",
-  "provider": "python",
+  "provider": "node",
   "deploy": {
-    "startCommand": "python -m bot.main"
+    "startCommand": "npm start"
   }
 }

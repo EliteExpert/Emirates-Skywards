@@ -1,0 +1,19 @@
+{
+  "name": "emirates-skywards-discord",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An Emirates PTFS Skywards Discord bot with flight events and persistent miles.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/database.js && node --check src/embeds.js && node --check src/ui.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.6.1",
+    "pg": "^8.16.3"
+  }
+}

@@ -1,6 +1,6 @@
 # Emirates Skywards Discord Bot
 
-A Discord bot for Emirates PTFS that provides Skywards accounts, tier visuals, event interest tracking, automatic event-mile awards, and a miles shop.
+A Node.js Discord bot for Emirates PTFS that provides Skywards accounts, tier visuals, flight cards, event interest tracking, automatic event-mile awards, and a miles shop.
 
 The tier artwork supplied for this project is stored in `assets/tiers/` and is used in account cards:
 
@@ -22,6 +22,8 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/event list` lists recent event IDs and interest counts.
 - `/miles flight` grants miles to one member for a completed flight and records the flight reference.
 - `/miles event` reads the interested members of a bot-created event or native Discord scheduled event, then grants each attendee a personalized award.
+- `/flight create` posts a flight card with the same text hierarchy as the supplied reference: flight code, airline, departure, aircraft, terminal, check-in status, location, interested count, and event ID.
+- `/flight list` lists the same native and bot-created events available through `/event list`.
 - `/shop` displays interactive purchase buttons for PTFS perks.
 
 ## Award calculation
@@ -56,28 +58,26 @@ For native Discord scheduled events, `/miles event` uses **1,000 base miles** un
 2. Enable the `applications.commands` scope when inviting the bot to your server.
 3. Copy `.env.example` to `.env` and set `DISCORD_TOKEN`.
 4. Optionally set `TEST_GUILD_ID` to sync commands instantly to one development server. Without it, commands sync globally and may take time to appear.
-5. Install and run:
+5. Install and run with Node.js 20 or newer:
 
 ```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e .
-python -m bot.main
+npm install
+npm start
 ```
 
-The bot uses PostgreSQL through `DATABASE_URL`, so accounts, event registrations, purchases, and award history survive redeployments.
+The bot uses PostgreSQL through `DATABASE_URL`, so accounts, event registrations, purchases, and award history survive redeployments. Discord interactions are acknowledged before database or scheduled-event lookups begin, which prevents long-running lookups from expiring the interaction.
 
 ## Railpack / Railway
 
-The repository includes `railpack.json`, which starts the worker with `python -m bot.main`, and `requirements.txt`, which Railpack uses to install the bot dependencies.
+The repository includes `railpack.json`, which starts the worker with `npm start`, and `package.json`, which Railpack uses to install the Node.js dependencies.
 Add `DISCORD_TOKEN` and `DATABASE_URL` to the service variables before deploying. In Railway, add a PostgreSQL service and link its `DATABASE_URL` to the bot service. `TEST_GUILD_ID` is optional and is useful for immediate command sync during development.
 
-The bot also reads native Discord scheduled events created by other users. Enable the **Server Members Intent** and **Guild Scheduled Events Intent** for the bot in the Discord Developer Portal so it can read event subscribers.
+The bot reads native Discord scheduled events created by other users. Enable the **Guild Scheduled Events Intent** for the bot in the Discord Developer Portal so it can read event subscribers. The JavaScript version does not request Message Content or the privileged Server Members gateway intent.
 
 ## Staff workflow
 
 1. A member runs `/account create`.
-2. A staff member posts an event with `/event create`.
-3. Members click **I'm Interested** and select their travel class.
+2. A staff member posts a generic event with `/event create`, or a flight card with `/flight create`.
+3. Members click **I'm Interested** and select their travel class. Native Discord events created by any member are also discoverable through `/event list`.
 4. Staff use `/event interested event_id` to review registrations from either bot events or native Discord scheduled events.
 5. Staff run `/miles event event_id` to preview the role-based awards, then run it again with `confirm:True` once the event is complete. For native Discord events, the base award defaults to 1,000 miles.

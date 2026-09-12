@@ -1,0 +1,471 @@
+const {
+  Client,
+  GatewayIntentBits,
+  Events,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+} = require('discord.js');
+const { Database } = require('./database');
+const {
+  CLASS_MULTIPLIERS,
+  DEFAULT_EVENT_BASE_MILES,
+  SHOP_ITEMS,
+  TIERS,
+  TIER_DISPLAY_NAMES,
+  TIER_ROLE_IDS,
+  TRAVEL_CLASS_ROLE_IDS,
+  TRAVEL_CLASSES,
+  settings,
+} = require('./config');
+const {
+  accountMessage,
+  accountInventoryEmbed,
+  awardPreviewEmbed,
+  eventEmbed,
+  scheduledEventPreviewEmbed,
+  shopEmbed,
+  number,
+  tierName,
+} = require('./embeds');
+const {
+  accountComponents,
+  eventComponents,
+  flightActionComponents,
+  shopComponents,
+  travelClassComponents,
+} = require('./ui');
+
+const appSettings = settings();
+const database = new Database(appSettings.databaseUrl);
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildScheduledEvents],
+});
+
+function buildCommands() {
+  const tierChoices = TIERS.map((tier) => ({
+    name: `${TIER_DISPLAY_NAMES[tier]} (<@&${TIER_ROLE_IDS[tier]}>)`,
+    value: tier,
+  }));
+  const travelChoices = TRAVEL_CLASSES.map((travelClass) => ({ name: travelClass, value: travelClass }));
+  return [
+    new SlashCommandBuilder().setName('account').setDescription('Create and manage Skywards accounts')
+      .addSubcommand((sub) => sub.setName('create').setDescription('Create your Emirates Skywards account'))
+      .addSubcommand((sub) => sub.setName('view').setDescription('View a Skywards account')
+        .addUserOption((option) => option.setName('member').setDescription('Account to view').setRequired(false)))
+      .addSubcommand((sub) => sub.setName('inventory').setDescription('View your purchased Skywards perks'))
+      .addSubcommand((sub) => sub.setName('set-tier').setDescription("Set a member's Skywards tier")
+        .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
+        .addStringOption((option) => option.setName('tier').setDescription('Tier').setRequired(true).addChoices(...tierChoices)))
+      .addSubcommand((sub) => sub.setName('add-miles').setDescription('Grant miles to a member')
+        .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
+        .addIntegerOption((option) => option.setName('miles').setDescription('Miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))),
+    new SlashCommandBuilder().setName('event').setDescription('Create and manage PTFS events')
+      .addSubcommand((sub) => sub.setName('create').setDescription('Post an event with an interest button')
+        .addStringOption((option) => option.setName('name').setDescription('Event name').setRequired(true).setMaxLength(80))
+        .addStringOption((option) => option.setName('description').setDescription('Description').setRequired(true).setMaxLength(500))
+        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))
+        .addStringOption((option) => option.setName('event_date').setDescription('Event date').setRequired(false).setMaxLength(80)))
+      .addSubcommand((sub) => sub.setName('list').setDescription('List recent PTFS events'))
+      .addSubcommand((sub) => sub.setName('interested').setDescription('View members interested in an event')
+        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true)))
+      .addSubcommand((sub) => sub.setName('award').setDescription('Award event miles using class and status multipliers')
+        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true))
+        .addBooleanOption((option) => option.setName('confirm').setDescription('Apply the award').setRequired(false))),
+    new SlashCommandBuilder().setName('flight').setDescription('Create and manage Emirates PTFS flight cards')
+      .addSubcommand((sub) => sub.setName('create').setDescription('Post a flight card with an interest button')
+        .addStringOption((option) => option.setName('flight_code').setDescription('Flight code, for example FZ001').setRequired(true).setMaxLength(30))
+        .addStringOption((option) => option.setName('airline').setDescription('Airline').setRequired(true).setMaxLength(50))
+        .addStringOption((option) => option.setName('departure').setDescription('Departure airport').setRequired(true).setMaxLength(100))
+        .addStringOption((option) => option.setName('aircraft').setDescription('Aircraft').setRequired(true).setMaxLength(50))
+        .addStringOption((option) => option.setName('terminal').setDescription('Terminal').setRequired(true).setMaxLength(30))
+        .addStringOption((option) => option.setName('check_in').setDescription('Check-in status').setRequired(true).setMaxLength(40))
+        .addStringOption((option) => option.setName('location').setDescription('Location').setRequired(true).setMaxLength(100))
+        .addStringOption((option) => option.setName('description').setDescription('Flight description').setRequired(false).setMaxLength(500))
+        .addStringOption((option) => option.setName('event_date').setDescription('Event date').setRequired(false).setMaxLength(80))
+        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles').setRequired(false).setMinValue(1).setMaxValue(1_000_000)))
+      .addSubcommand((sub) => sub.setName('list').setDescription('List flight cards and native Discord events')),
+    new SlashCommandBuilder().setName('miles').setDescription('Award Skywards miles for flights and events')
+      .addSubcommand((sub) => sub.setName('flight').setDescription('Award miles to one member for a completed flight')
+        .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
+        .addIntegerOption((option) => option.setName('miles').setDescription('Miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))
+        .addStringOption((option) => option.setName('flight_reference').setDescription('Flight reference').setRequired(false).setMaxLength(100)))
+      .addSubcommand((sub) => sub.setName('event').setDescription('Award miles to everyone interested in an event')
+        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true))
+        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles for native events; defaults to 1,000').setRequired(false).setMinValue(1).setMaxValue(1_000_000))
+        .addStringOption((option) => option.setName('travel_class').setDescription('Fallback class when no class role exists').setRequired(false).addChoices(...travelChoices))
+        .addBooleanOption((option) => option.setName('confirm').setDescription('Apply the award').setRequired(false))),
+    new SlashCommandBuilder().setName('shop').setDescription('Browse and buy Skywards perks'),
+  ];
+}
+
+function parseEventId(value) {
+  const match = String(value || '').trim().replaceAll('`', '').match(/^(?:event[\s_-]*)?#?(\d+)\b/i);
+  return match ? match[1] : null;
+}
+
+function requireGuild(interaction) {
+  if (!interaction.guild) throw new Error('This command can only be used inside a server.');
+  return interaction.guild;
+}
+
+function requireManager(interaction) {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    throw new Error('You need the **Manage Server** permission to use that command.');
+  }
+}
+
+function memberRoleIds(member) {
+  return new Set(member?.roles?.cache?.keys() || []);
+}
+
+function resolveTravelClass(member, fallback = 'Economy') {
+  const roleIds = memberRoleIds(member);
+  for (const travelClass of ['First', 'Business', 'Economy']) {
+    if (roleIds.has(TRAVEL_CLASS_ROLE_IDS[travelClass])) return travelClass;
+  }
+  return CLASS_MULTIPLIERS[fallback] ? fallback : 'Economy';
+}
+
+function resolveTier(member, fallback = null) {
+  const roleIds = memberRoleIds(member);
+  for (const tier of ['Platinum', 'Gold', 'Silver', 'Blue']) {
+    if (roleIds.has(TIER_ROLE_IDS[tier])) return tier;
+  }
+  return fallback;
+}
+
+async function findMember(guild, userId) {
+  return guild.members.cache.get(String(userId)) || guild.members.fetch(String(userId)).catch(() => null);
+}
+
+async function applyRoleProfiles(guild, rows) {
+  const classOverrides = {};
+  const tierOverrides = {};
+  await Promise.all(rows.map(async (row) => {
+    const member = await findMember(guild, row.user_id);
+    row.travel_class = resolveTravelClass(member, row.travel_class || 'Economy');
+    row.tier = resolveTier(member, row.tier || null);
+    classOverrides[String(row.user_id)] = row.travel_class;
+    if (row.tier) tierOverrides[String(row.user_id)] = row.tier;
+  }));
+  return { classOverrides, tierOverrides };
+}
+
+async function fetchScheduledEvent(guild, eventId) {
+  return guild.scheduledEvents.fetch(String(eventId)).catch(() => null);
+}
+
+async function fetchScheduledRows(event, fallbackClass = 'Economy') {
+  const rows = [];
+  let after;
+  while (true) {
+    const options = { limit: 100, withMember: true };
+    if (after) options.after = after;
+    const page = await event.fetchSubscribers(options);
+    const pageRows = await Promise.all([...page.values()].map(async (subscriber) => {
+      const member = subscriber.member || await findMember(event.guild, subscriber.user.id);
+      const account = await database.getAccount(subscriber.user.id);
+      return {
+        user_id: subscriber.user.id,
+        display_name: member?.displayName || subscriber.user.globalName || subscriber.user.username,
+        travel_class: resolveTravelClass(member, fallbackClass),
+        tier: resolveTier(member, account?.tier || null),
+      };
+    }));
+    rows.push(...pageRows);
+    if (page.size < 100) break;
+    const ids = [...page.keys()];
+    after = ids[ids.length - 1];
+    if (!after) break;
+  }
+  return rows;
+}
+
+async function handleAccount(interaction, subcommand) {
+  const user = interaction.options.getUser('member') || interaction.user;
+  if (subcommand === 'create') {
+    const existing = await database.getAccount(interaction.user.id);
+    if (existing) return { content: `You already have a Skywards account: \`${existing.skywards_number}\`.` };
+    const account = await database.createAccount(interaction.user.id, interaction.user.displayName);
+    return { ...accountMessage(account, []), components: accountComponents(account.user_id, account.tier) };
+  }
+  if (subcommand === 'view') {
+    const account = await database.getAccount(user.id);
+    if (!account) return { content: `${user.id === interaction.user.id ? 'You do not have' : 'That member does not have'} a Skywards account yet. Use \`/account create\` first.` };
+    return { ...accountMessage(account, await database.getInventory(user.id)), components: accountComponents(account.user_id, account.tier) };
+  }
+  if (subcommand === 'inventory') {
+    const account = await database.getAccount(interaction.user.id);
+    if (!account) return { content: 'You do not have a Skywards account yet. Use `/account create` first.' };
+    return { embeds: [accountInventoryEmbed(account, await database.getInventory(interaction.user.id))] };
+  }
+  requireGuild(interaction);
+  requireManager(interaction);
+  const account = await database.getAccount(user.id);
+  if (!account) return { content: 'That member needs to create an account first.' };
+  if (subcommand === 'set-tier') {
+    const tier = interaction.options.getString('tier', true);
+    await database.updateTier(user.id, tier);
+    return { content: `**${user.displayName}** is now a **${TIER_DISPLAY_NAMES[tier]}** member (<@&${TIER_ROLE_IDS[tier]}>).` };
+  }
+  const miles = interaction.options.getInteger('miles', true);
+  await database.addMiles(user.id, miles);
+  return { content: `Granted **${number(miles)} miles** to **${user.displayName}**.` };
+}
+
+async function handleEvent(interaction, subcommand) {
+  const guild = requireGuild(interaction);
+  if (subcommand === 'create') {
+    requireManager(interaction);
+    const event = await database.createEvent({
+      guildId: guild.id, channelId: interaction.channelId, name: interaction.options.getString('name', true),
+      description: interaction.options.getString('description', true), baseMiles: interaction.options.getInteger('base_miles', true),
+      eventDate: interaction.options.getString('event_date'), createdBy: interaction.user.id,
+    });
+    return { embeds: [eventEmbed(event, 0)], components: eventComponents(event.id), eventToSaveId: event.id };
+  }
+  if (subcommand === 'list') return eventListPayload(guild);
+  const eventId = parseEventId(interaction.options.getString('event_id', true));
+  if (!eventId) return { content: 'Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.' };
+  const event = await database.getEvent(eventId);
+  if (subcommand === 'interested') {
+    requireManager(interaction);
+    if (event && event.guild_id === guild.id) {
+      const rows = await database.listInterest(eventId);
+      if (!rows.length) return { content: `No one has clicked interested for **${event.name}** yet.` };
+      await applyRoleProfiles(guild, rows);
+      return { embeds: [awardPreviewEmbed(event, rows)] };
+    }
+    const scheduled = await fetchScheduledEvent(guild, eventId);
+    if (!scheduled) return { content: 'No bot event or Discord scheduled event with that ID exists in this server.' };
+    const rows = await fetchScheduledRows(scheduled);
+    if (!rows.length) return { content: `No one has clicked interested for **${scheduled.name}** yet.` };
+    return { embeds: [scheduledEventPreviewEmbed(scheduled, rows)] };
+  }
+  requireManager(interaction);
+  if (!event || event.guild_id !== guild.id) return { content: 'No event with that ID exists in this server.' };
+  const rows = await database.listInterest(eventId);
+  if (!rows.length) return { content: 'There are no interested members to award.' };
+  const { classOverrides, tierOverrides } = await applyRoleProfiles(guild, rows);
+  if (!interaction.options.getBoolean('confirm')) return { embeds: [awardPreviewEmbed(event, rows)], content: 'Set `confirm` to **True** to apply these awards. This can only be done once per event.' };
+  const result = await database.awardEvent(eventId, classOverrides, tierOverrides);
+  if (result.status === 'already_awarded') return { content: 'Miles for this event have already been awarded.' };
+  const total = result.awards.reduce((sum, award) => sum + award.miles, 0);
+  return { content: `**Awards complete.** Granted **${number(total)} miles** across **${result.awards.length}** passenger(s).` };
+}
+
+async function eventListPayload(guild) {
+  const events = await database.listEvents(guild.id);
+  const scheduled = await guild.scheduledEvents.fetch().catch(() => new Map());
+  const embed = new (require('discord.js').EmbedBuilder)()
+    .setTitle('Emirates PTFS Events')
+    .setDescription('Use the event ID with `/event interested` or `/miles event`.')
+    .setColor(0x315b9a);
+  const counts = await Promise.all(events.slice(-20).map((event) => database.countInterest(event.id)));
+  events.slice(-20).forEach((event, index) => {
+    embed.addFields({ name: `${event.id} — ${event.name}`, value: event.awarded_at ? 'Awarded' : `${counts[index]} interested` });
+  });
+  for (const event of [...scheduled.values()].slice(-20)) {
+    embed.addFields({ name: `${event.id} — ${event.name}`, value: `${event.userCount || 0} interested · Discord scheduled event` });
+  }
+  return { embeds: [embed] };
+}
+
+async function handleFlight(interaction, subcommand) {
+  const guild = requireGuild(interaction);
+  if (subcommand === 'list') return eventListPayload(guild);
+  requireManager(interaction);
+  const flightCode = interaction.options.getString('flight_code', true);
+  const airline = interaction.options.getString('airline', true);
+  const departure = interaction.options.getString('departure', true);
+  const event = await database.createEvent({
+    guildId: guild.id, channelId: interaction.channelId, name: `${flightCode} · ${airline}`,
+    description: interaction.options.getString('description') || `Departure · ${departure}`,
+    baseMiles: interaction.options.getInteger('base_miles') || DEFAULT_EVENT_BASE_MILES,
+    eventDate: interaction.options.getString('event_date'), createdBy: interaction.user.id, eventType: 'FLIGHT',
+    flightCode, airline, departure, aircraft: interaction.options.getString('aircraft', true),
+    terminal: interaction.options.getString('terminal', true), checkInStatus: interaction.options.getString('check_in', true),
+    location: interaction.options.getString('location', true),
+  });
+  const { eventEmbed: makeEmbed } = require('./embeds');
+  return { embeds: [makeEmbed(event, 0)], components: flightActionComponents(event.id), eventToSaveId: event.id };
+}
+
+async function handleMiles(interaction, subcommand) {
+  const guild = requireGuild(interaction);
+  requireManager(interaction);
+  if (subcommand === 'flight') {
+    const user = interaction.options.getUser('member', true);
+    const miles = interaction.options.getInteger('miles', true);
+    const result = await database.addFlightMiles(user.id, miles, interaction.options.getString('flight_reference') || 'PTFS Flight', interaction.user.id);
+    if (result === 'missing_account') return { content: 'That member needs to create a Skywards account before receiving flight miles.' };
+    return { content: `Awarded **${number(miles)} miles** to **${user.displayName}** for *${interaction.options.getString('flight_reference') || 'PTFS Flight'}*.` };
+  }
+  const eventId = parseEventId(interaction.options.getString('event_id', true));
+  if (!eventId) return { content: 'Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.' };
+  const botEvent = await database.getEvent(eventId);
+  if (botEvent && botEvent.guild_id === guild.id) {
+    const rows = await database.listInterest(eventId);
+    if (!rows.length) return { content: 'There are no interested members to award.' };
+    const { classOverrides, tierOverrides } = await applyRoleProfiles(guild, rows);
+    if (!interaction.options.getBoolean('confirm')) return { embeds: [awardPreviewEmbed(botEvent, rows)], content: 'Set `confirm` to **True** to apply these awards. This can only be done once per event.' };
+    const result = await database.awardEvent(eventId, classOverrides, tierOverrides);
+    if (result.status === 'already_awarded') return { content: 'Miles for this event have already been awarded.' };
+    const total = result.awards.reduce((sum, award) => sum + award.miles, 0);
+    return { content: `**Event awards complete.** Granted **${number(total)} miles** across **${result.awards.length}** passenger(s).` };
+  }
+  const scheduled = await fetchScheduledEvent(guild, eventId);
+  if (!scheduled) return { content: 'No bot event or Discord scheduled event with that ID exists in this server.' };
+  const baseMiles = interaction.options.getInteger('base_miles') || DEFAULT_EVENT_BASE_MILES;
+  const fallbackClass = interaction.options.getString('travel_class') || 'Economy';
+  const rows = await fetchScheduledRows(scheduled, fallbackClass);
+  if (!rows.length) return { content: `No one has clicked interested for **${scheduled.name}** yet.` };
+  if (!interaction.options.getBoolean('confirm')) return {
+    embeds: [scheduledEventPreviewEmbed(scheduled, rows, baseMiles)],
+    content: `Base miles: **${number(baseMiles)}** · Fallback class: **${fallbackClass}**\nClass and tier roles override the fallback for each attendee.\nSet \`confirm\` to **True** to award miles to attendees with Skywards accounts.`,
+  };
+  const result = await database.awardExternalEvent(eventId, baseMiles, rows);
+  if (result.status === 'already_awarded') return { content: 'Miles for this Discord event have already been awarded.' };
+  const total = result.awards.reduce((sum, award) => sum + award.miles, 0);
+  const skipped = result.missingAccounts ? ` Skipped **${result.missingAccounts}** attendee(s) without accounts.` : '';
+  return { content: `**Event awards complete.** Granted **${number(total)} miles** across **${result.awards.length}** passenger(s).${skipped}` };
+}
+
+async function handleComponent(interaction) {
+  const [type, action, id, ownerId] = interaction.customId.split(':');
+  if (interaction.isButton() && type === 'event' && action === 'interest') {
+    await interaction.deferReply({ ephemeral: true });
+    return interaction.editReply({ content: 'Choose your travel class.', components: travelClassComponents(id) });
+  }
+  if (interaction.isStringSelectMenu() && type === 'event' && action === 'class') {
+    await interaction.deferReply({ ephemeral: true });
+    const account = await database.getAccount(interaction.user.id);
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    const selected = interaction.values[0];
+    const added = await database.addInterest(id, interaction.user.id, selected);
+    if (!added) return interaction.editReply({ content: 'You are already registered as interested in this event.' });
+    const event = await database.getEvent(id);
+    if (event && interaction.message) {
+      const count = await database.countInterest(id);
+      await interaction.message.edit({ embeds: [eventEmbed(event, count)], components: eventComponents(id) }).catch(() => {});
+    }
+    return interaction.editReply({ content: `You are marked **Interested** for **${selected}**.` });
+  }
+  if (interaction.isButton() && type === 'account' && action === 'shop') {
+    await interaction.deferReply({ ephemeral: true });
+    const account = await database.getAccount(id);
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    return interaction.editReply({ embeds: [shopEmbed()], components: shopComponents(account.user_id) });
+  }
+  if (interaction.isButton() && type === 'account' && action === 'upgrade') {
+    await interaction.deferReply({ ephemeral: true });
+    const account = await database.getAccount(id);
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    const nextTier = TIERS[TIERS.indexOf(account.tier) + 1];
+    if (!nextTier) return interaction.editReply({ content: 'You are already at the highest Skywards tier.' });
+    await database.updateTier(id, nextTier);
+    return interaction.editReply({ content: `**${account.display_name}** is now a **${TIER_DISPLAY_NAMES[nextTier]}** member (<@&${TIER_ROLE_IDS[nextTier]}>).` });
+  }
+  if (interaction.isButton() && type === 'shop' && action === 'buy') {
+    await interaction.deferReply({ ephemeral: true });
+    const item = SHOP_ITEMS[id];
+    const account = await database.getAccount(ownerId);
+    if (!item || !account || ownerId !== interaction.user.id) return interaction.editReply({ content: 'This shop session belongs to another member.' });
+    const result = await database.purchase(ownerId, id, item.price);
+    if (result === 'insufficient_miles') return interaction.editReply({ content: `You need **${number(item.price)} miles** to purchase **${item.name}**.` });
+    if (result === 'missing_account') return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    return interaction.editReply({ content: `Purchased **${item.name}** for **${number(item.price)} miles**.` });
+  }
+  if (interaction.isButton() && type === 'shop' && action === 'back') {
+    await interaction.deferReply({ ephemeral: true });
+    const account = await database.getAccount(id);
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
+  }
+  return null;
+}
+
+async function handleCommand(interaction) {
+  const name = interaction.commandName;
+  const subcommand = interaction.options.getSubcommand(false);
+  if (name === 'account') return handleAccount(interaction, subcommand);
+  if (name === 'event') return handleEvent(interaction, subcommand);
+  if (name === 'flight') return handleFlight(interaction, subcommand);
+  if (name === 'miles') return handleMiles(interaction, subcommand);
+  if (name === 'shop') return { embeds: [shopEmbed()], components: shopComponents(interaction.user.id) };
+  return { content: 'Unknown command.' };
+}
+
+function isPublicCommand(interaction) {
+  return (interaction.commandName === 'account' && ['create', 'view', 'inventory'].includes(interaction.options.getSubcommand(false)))
+    || (interaction.commandName === 'event' && interaction.options.getSubcommand(false) === 'create')
+    || (interaction.commandName === 'flight' && interaction.options.getSubcommand(false) === 'create');
+}
+
+async function respondError(interaction, error) {
+  console.error('Interaction failed:', error);
+  const content = error?.message || 'Something went wrong while processing that command. Check the bot logs for details.';
+  if (interaction.deferred || interaction.replied) await interaction.editReply({ content, embeds: [], components: [] }).catch(() => {});
+  else await interaction.reply({ content, ephemeral: true }).catch(() => {});
+}
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (interaction.isChatInputCommand()) {
+      await interaction.deferReply({ ephemeral: !isPublicCommand(interaction) });
+      const payload = await handleCommand(interaction);
+      if (payload.eventToSaveId) {
+        const eventId = payload.eventToSaveId;
+        delete payload.eventToSaveId;
+        const message = await interaction.editReply(payload);
+        await database.setEventMessageId(eventId, message.id).catch(() => {});
+      } else {
+        await interaction.editReply(payload);
+      }
+      return;
+    }
+    if (interaction.isButton() || interaction.isStringSelectMenu()) await handleComponent(interaction);
+  } catch (error) {
+    await respondError(interaction, error);
+  }
+});
+
+client.once(Events.ClientReady, async (ready) => {
+  try {
+    const commands = buildCommands().map((command) => command.toJSON());
+    if (appSettings.testGuildId) {
+      const guild = ready.guilds.cache.get(appSettings.testGuildId);
+      if (guild) await guild.commands.set(commands);
+      else await ready.application.commands.set(commands, appSettings.testGuildId);
+      console.log(`Slash commands synced to test guild ${appSettings.testGuildId}`);
+    } else {
+      await ready.application.commands.set(commands);
+      console.log('Global slash commands synced');
+    }
+    console.log(`Logged in as ${ready.user.tag}`);
+  } catch (error) {
+    console.error('Command registration failed:', error);
+  }
+});
+
+async function start() {
+  if (!appSettings.token) throw new Error('DISCORD_TOKEN is missing.');
+  await database.initialize();
+  await client.login(appSettings.token);
+}
+
+process.on('SIGTERM', async () => {
+  await client.destroy();
+  await database.close();
+  process.exit(0);
+});
+process.on('SIGINT', async () => {
+  await client.destroy();
+  await database.close();
+  process.exit(0);
+});
+
+start().catch((error) => {
+  console.error('Startup failed:', error);
+  process.exitCode = 1;
+});
