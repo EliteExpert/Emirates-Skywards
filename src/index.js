@@ -259,25 +259,29 @@ async function handleComponent(interaction) {
     return interaction.editReply({ content: `You are marked **Interested** for **${selected}**.` });
   }
   if (interaction.isButton() && type === 'account' && action === 'refresh') {
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can use these dashboard buttons.', ephemeral: true });
     await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
   }
   if (interaction.isButton() && type === 'account' && action === 'shop') {
-    await interaction.deferReply({ ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can open this shop session.', ephemeral: true });
+    await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     return interaction.editReply({ embeds: [shopEmbed()], components: shopComponents(account.user_id) });
   }
   if (interaction.isButton() && type === 'account' && action === 'upgrade') {
-    await interaction.deferReply({ ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can upgrade this account.', ephemeral: true });
+    await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     const nextTier = TIERS[TIERS.indexOf(account.tier) + 1];
     if (!nextTier) return interaction.editReply({ content: 'You are already at the highest Skywards tier.' });
     await database.updateTier(id, nextTier);
-    return interaction.editReply({ content: `**${account.display_name}** is now a **${TIER_DISPLAY_NAMES[nextTier]}** member (<@&${TIER_ROLE_IDS[nextTier]}>).` });
+    const upgraded = await database.getAccount(id);
+    return interaction.editReply({ ...accountMessage(upgraded, await database.getInventory(id)), components: accountComponents(id, upgraded.tier) });
   }
   if (interaction.isButton() && type === 'shop' && action === 'buy') {
     await interaction.deferReply({ ephemeral: true });
@@ -290,7 +294,8 @@ async function handleComponent(interaction) {
     return interaction.editReply({ content: `Purchased **${item.name}** for **${number(item.price)} miles**.` });
   }
   if (interaction.isButton() && type === 'shop' && action === 'back') {
-    await interaction.deferReply({ ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can return to this dashboard.', ephemeral: true });
+    await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
@@ -309,8 +314,9 @@ async function handleCommand(interaction) {
 }
 
 function isPublicCommand(interaction) {
-  return interaction.commandName === 'account'
-    && ['create', 'view', 'inventory'].includes(interaction.options.getSubcommand(false));
+  return interaction.commandName === 'shop'
+    || (interaction.commandName === 'account'
+      && ['create', 'view', 'inventory'].includes(interaction.options.getSubcommand(false)));
 }
 
 async function respondError(interaction, error) {
@@ -344,9 +350,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.once(Events.ClientReady, async (ready) => {
   try {
     const commands = buildCommands().map((command) => command.toJSON());
+    const commandNames = commands.map((command) => command.name);
+    if (new Set(commandNames).size !== commandNames.length) {
+      throw new Error(`Duplicate slash command names detected: ${commandNames.join(', ')}`);
+    }
     if (appSettings.testGuildId) {
-      // Replace the global set as well, so removed commands do not linger from an older deployment.
-      await ready.application.commands.set(commands);
+      // Development commands are guild-scoped. Clear older global copies so Discord cannot show duplicates.
+      await ready.application.commands.set([]);
       const guild = ready.guilds.cache.get(appSettings.testGuildId);
       if (guild) await guild.commands.set(commands);
       else await ready.application.commands.set(commands, appSettings.testGuildId);

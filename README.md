@@ -18,7 +18,7 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/account add-miles` lets staff grant miles.
 - `/flights-list` lists recent flights and events, including native Discord scheduled events created by anyone.
 - `/flight-awards` reads the interested members for the supplied flight or event ID and awards each attendee personalized miles.
-- `/shop` displays interactive purchase buttons for PTFS perks.
+- `/shop` displays interactive purchase buttons for PTFS perks publicly.
 
 ## Award calculation
 
@@ -55,7 +55,7 @@ Reference: [Emirates Earn Miles](https://www.emirates.com/us/english/skywards/ea
 1. Create a Discord application and bot in the Discord Developer Portal.
 2. Enable the `applications.commands` scope when inviting the bot to your server.
 3. Copy `.env.example` to `.env` and set `DISCORD_TOKEN`.
-4. Optionally set `TEST_GUILD_ID` to sync commands instantly to one development server. Without it, commands sync globally and may take time to appear.
+4. Optionally set `TEST_GUILD_ID` to sync commands instantly to one development server. In test-guild mode, commands are guild-only and old global copies are cleared to prevent duplicate command entries. Without it, commands sync globally and may take time to appear.
 5. Install and run with Node.js 20 or newer:
 
 ```powershell

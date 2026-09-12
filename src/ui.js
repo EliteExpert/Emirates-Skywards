@@ -14,7 +14,7 @@ function accountComponents(userId, tier) {
     new ButtonBuilder().setCustomId(`account:shop:${userId}`).setLabel('Shop').setStyle(ButtonStyle.Secondary),
   ];
   if (nextTier) {
-    buttons.unshift(new ButtonBuilder().setCustomId(`account:upgrade:${userId}`).setLabel('Upgrade to next tier').setStyle(ButtonStyle.Primary));
+    buttons.unshift(new ButtonBuilder().setCustomId(`account:upgrade:${userId}`).setLabel('Upgrade to next tier').setStyle(ButtonStyle.Success));
   }
   return [new ActionRowBuilder().addComponents(buttons)];
 }
@@ -24,7 +24,7 @@ function shopComponents(userId) {
   const rows = [];
   for (let index = 0; index < entries.length; index += 5) {
     rows.push(new ActionRowBuilder().addComponents(entries.slice(index, index + 5).map(([id, item]) =>
-      new ButtonBuilder().setCustomId(`shop:buy:${id}:${userId}`).setLabel(`Buy ${item.name}`).setStyle(ButtonStyle.Primary))));
+      new ButtonBuilder().setCustomId(`shop:buy:${id}:${userId}`).setLabel(`Buy ${item.name}`).setStyle(ButtonStyle.Success))));
   }
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`shop:back:${userId}`).setLabel('Back').setStyle(ButtonStyle.Secondary),
@@ -34,7 +34,7 @@ function shopComponents(userId) {
 
 function eventComponents(eventId) {
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`event:interest:${eventId}`).setLabel("I'm Interested").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`event:interest:${eventId}`).setLabel("I'm Interested").setStyle(ButtonStyle.Secondary),
   )];
 }
 
