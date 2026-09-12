@@ -23,6 +23,12 @@ const TRAVEL_CLASS_ROLE_IDS = {
   First: '1331853227720708146',
 };
 
+const ADMIN_ROLE_IDS = [
+  '1416276747246244013',
+  '1464239438183010469',
+  '1473279339817730170',
+];
+
 const TIER_MINIMUM_MILES = { Blue: 0, Silver: 1500, Gold: 3500, Platinum: 7000 };
 // Official Emirates Skywards status bonuses for qualifying Emirates flights.
 const TIER_BONUS_PERCENTAGES = { Blue: 0, Silver: 30, Gold: 75, Platinum: 100 };
@@ -99,6 +105,7 @@ module.exports = {
   TIER_DISPLAY_NAMES,
   TIER_ROLE_IDS,
   TRAVEL_CLASS_ROLE_IDS,
+  ADMIN_ROLE_IDS,
   TIER_MINIMUM_MILES,
   TIER_BONUS_PERCENTAGES,
   TIER_MULTIPLIERS,

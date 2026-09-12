@@ -9,6 +9,7 @@ const { Database } = require('./database');
 const {
   CLASS_MULTIPLIERS,
   DEFAULT_EVENT_BASE_MILES,
+  ADMIN_ROLE_IDS,
   SHOP_ITEMS,
   TIERS,
   TIER_DISPLAY_NAMES,
@@ -79,9 +80,11 @@ function requireGuild(interaction) {
 }
 
 function requireManager(interaction) {
-  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-    throw new Error('You need the **Manage Server** permission to use that command.');
-  }
+  const isAdministrator = interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+  const hasStaffRole = ADMIN_ROLE_IDS.some((roleId) => interaction.member?.roles?.cache?.has(roleId));
+  if (isAdministrator || hasStaffRole) return;
+  const allowedRoles = ADMIN_ROLE_IDS.map((roleId) => `<@&${roleId}>`).join(', ');
+  throw new Error(`You need the **Administrator** permission or one of these staff roles: ${allowedRoles}.`);
 }
 
 function memberRoleIds(member) {
