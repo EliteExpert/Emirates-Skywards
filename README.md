@@ -12,12 +12,12 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 ## Features
 
 - `/account create` creates a member account with a generated Skywards number.
-- `/account view` shows the account card, balance, tier artwork, status multiplier, and owned perks.
+- `/account view` shows the account card, balance, tier artwork, status bonus, and owned perks.
 - `/account inventory` shows purchased perks.
 - `/account set-tier` lets staff update a member's tier.
 - `/account add-miles` lets staff grant miles.
-- `/event list` lists recent flights and events, including native Discord scheduled events created by anyone.
-- `/miles flight` reads the interested members for the supplied event ID and awards each attendee personalized miles.
+- `/flights-list` lists recent flights and events, including native Discord scheduled events created by anyone.
+- `/flight-awards` reads the interested members for the supplied flight or event ID and awards each attendee personalized miles.
 - `/shop` displays interactive purchase buttons for PTFS perks.
 
 ## Award calculation
@@ -35,16 +35,20 @@ Travel-class multipliers:
 | Business | 2.00× |
 | First | 3.00× |
 
-Skywards-tier multipliers:
+Official Emirates Skywards status bonuses:
 
-| Tier | Multiplier |
-| --- | ---: |
-| Blue | 1.00× |
-| Silver | 1.00× |
-| Gold | 1.30× |
-| Platinum | 1.75× |
+| Tier | Status bonus | Total award multiplier |
+| --- | ---: | ---: |
+| Blue | +0% | 1.00× |
+| Silver | +30% | 1.30× |
+| Gold | +75% | 1.75× |
+| Platinum | +100% | 2.00× |
 
-For native Discord scheduled events, `/miles flight` uses **1,000 base miles** unless another value is supplied. The attendee's Economy, Business, or First role determines their cabin multiplier; without one of those roles, the command's optional fallback class is used. The Blue, Silver, Gold, or Platinum role determines the tier multiplier, falling back to the saved account tier when no tier role is present. This keeps the event awards aligned with the shop prices, which range from **2,000** to **8,000 miles**.
+For native Discord scheduled events, `/flight-awards` uses **1,000 base miles** unless another value is supplied. The attendee's Economy, Business, or First role determines their PTFS cabin multiplier; without one of those roles, the command's optional fallback class is used. The Blue, Silver, Gold, or Platinum role determines the tier multiplier, falling back to the saved account tier when no tier role is present. This keeps the flight awards aligned with the shop prices, which range from **2,000** to **8,000 miles**.
+
+Emirates calculates the base flight miles using the route, fare type, and cabin. The status bonuses above are the official Emirates bonuses; the cabin multipliers in this bot are PTFS gameplay settings rather than universal real-world Emirates values.
+
+Reference: [Emirates Earn Miles](https://www.emirates.com/us/english/skywards/earn-miles/) and [Emirates Skywards Programme Rules](https://www.emirates.com/english/skywards/emirates-skywards-programme-rules/).
 
 ## Setup
 
@@ -71,5 +75,5 @@ The bot reads native Discord scheduled events created by other users. Enable the
 ## Staff workflow
 
 1. A member runs `/account create`.
-2. Members use Discord's native **Interested** control on a flight or event. Native Discord events created by any member are discoverable through `/event list`.
-3. Staff run `/miles flight event_id` to preview the role-based awards, then run it again with `confirm:True` once the event is complete. For native Discord events, the base award defaults to 1,000 miles.
+2. Members use Discord's native **Interested** control on a flight or event. Native Discord events created by any member are discoverable through `/flights-list`.
+3. Staff run `/flight-awards event_id` to preview the role-based awards, then run it again with `confirm:True` once the flight or event is complete. For native Discord events, the base award defaults to 1,000 miles.

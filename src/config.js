@@ -4,7 +4,7 @@ const TIERS = ['Blue', 'Silver', 'Gold', 'Platinum'];
 const TRAVEL_CLASSES = ['Economy', 'Premium Economy', 'Business', 'First'];
 
 const TIER_DISPLAY_NAMES = {
-  Blue: 'Bronze',
+  Blue: 'Blue',
   Silver: 'Silver',
   Gold: 'Gold',
   Platinum: 'Platinum',
@@ -24,7 +24,11 @@ const TRAVEL_CLASS_ROLE_IDS = {
 };
 
 const TIER_MINIMUM_MILES = { Blue: 0, Silver: 1500, Gold: 3500, Platinum: 7000 };
-const TIER_MULTIPLIERS = { Blue: 1, Silver: 1, Gold: 1.3, Platinum: 1.75 };
+// Official Emirates Skywards status bonuses for qualifying Emirates flights.
+const TIER_BONUS_PERCENTAGES = { Blue: 0, Silver: 30, Gold: 75, Platinum: 100 };
+const TIER_MULTIPLIERS = Object.fromEntries(
+  Object.entries(TIER_BONUS_PERCENTAGES).map(([tier, bonus]) => [tier, 1 + (bonus / 100)]),
+);
 const CLASS_MULTIPLIERS = { Economy: 1, 'Premium Economy': 1.25, Business: 2, First: 3 };
 const TIER_COLORS = { Blue: 0x315b9a, Silver: 0x9297a1, Gold: 0xb48a35, Platinum: 0x5f626b };
 
@@ -35,20 +39,20 @@ const TIER_BENEFITS = {
     'Priority for boarding gates',
   ],
   Silver: [
-    'All benefits from Bronze',
+    'All benefits from Blue',
     'Use your miles to upgrade on selected routes',
     'Eligible for upgrades when seats are open',
   ],
   Gold: [
     'All benefits from Silver',
-    '+30% bonus points on all Emirates PTFS flights',
+    '+75% bonus Skywards miles on all Emirates PTFS flights',
     'Access to the Business Class Lounge at the Dubai Hub',
     'Extra baggage slots for long-haul PTFS routes',
     'Complimentary flight upgrades for one friend per event',
   ],
   Platinum: [
     'All benefits from Gold',
-    '+75% bonus points per flight',
+    '+100% bonus Skywards miles per flight',
     'Access to Business Class lounges worldwide',
     'Priority baggage handling at all PTFS airports',
     'Complimentary flight upgrades for one friend per event',
@@ -96,6 +100,7 @@ module.exports = {
   TIER_ROLE_IDS,
   TRAVEL_CLASS_ROLE_IDS,
   TIER_MINIMUM_MILES,
+  TIER_BONUS_PERCENTAGES,
   TIER_MULTIPLIERS,
   CLASS_MULTIPLIERS,
   TIER_COLORS,

@@ -4,6 +4,7 @@ const {
   CLASS_MULTIPLIERS,
   SHOP_ITEMS,
   TIER_BENEFITS,
+  TIER_BONUS_PERCENTAGES,
   TIER_COLORS,
   TIER_DISPLAY_NAMES,
   TIER_MINIMUM_MILES,
@@ -30,7 +31,7 @@ function accountMessage(account, inventory) {
       { name: 'Skywards number', value: '`' + account.skywards_number + '`', inline: true },
       { name: 'Available miles', value: `**${number(account.miles)}**`, inline: true },
       { name: 'Tier threshold', value: `${number(TIER_MINIMUM_MILES[tier])} miles`, inline: true },
-      { name: 'Status bonus', value: `${TIER_MULTIPLIERS[tier].toFixed(2)}× event multiplier`, inline: true },
+      { name: 'Status bonus', value: `+${TIER_BONUS_PERCENTAGES[tier]}% Skywards miles`, inline: true },
       { name: `${tierName(tier)} benefits`, value: TIER_BENEFITS[tier].map((benefit) => `• ${benefit}`).join('\n') },
       { name: 'Your perks', value: inventory.length ? inventory.map((item) => `${titleCase(item.product_id)} × ${item.quantity}`).join('\n') : '*No perks owned yet.*' },
     )

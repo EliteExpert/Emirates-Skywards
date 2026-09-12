@@ -58,14 +58,12 @@ function buildCommands() {
       .addSubcommand((sub) => sub.setName('add-miles').setDescription('Grant miles to a member')
         .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
         .addIntegerOption((option) => option.setName('miles').setDescription('Miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))),
-    new SlashCommandBuilder().setName('event').setDescription('List flights and events')
-      .addSubcommand((sub) => sub.setName('list').setDescription('List recent flights and events')),
-    new SlashCommandBuilder().setName('miles').setDescription('Award Skywards miles for flights and events')
-      .addSubcommand((sub) => sub.setName('flight').setDescription('Award miles to everyone interested in a flight or event')
-        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true))
-        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles for native events; defaults to 1,000').setRequired(false).setMinValue(1).setMaxValue(1_000_000))
-        .addStringOption((option) => option.setName('travel_class').setDescription('Fallback class when no class role exists').setRequired(false).addChoices(...travelChoices))
-        .addBooleanOption((option) => option.setName('confirm').setDescription('Apply the award').setRequired(false))),
+    new SlashCommandBuilder().setName('flights-list').setDescription('List flights and events'),
+    new SlashCommandBuilder().setName('flight-awards').setDescription('Award Skywards miles for a flight or event')
+      .addStringOption((option) => option.setName('event_id').setDescription('Flight or event ID').setRequired(true))
+      .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles for native events; defaults to 1,000').setRequired(false).setMinValue(1).setMaxValue(1_000_000))
+      .addStringOption((option) => option.setName('travel_class').setDescription('Fallback class when no class role exists').setRequired(false).addChoices(...travelChoices))
+      .addBooleanOption((option) => option.setName('confirm').setDescription('Apply the award').setRequired(false)),
     new SlashCommandBuilder().setName('shop').setDescription('Browse and buy Skywards perks'),
   ];
 }
@@ -185,9 +183,8 @@ async function handleAccount(interaction, subcommand) {
   return { content: `Granted **${number(miles)} miles** to **${user.displayName}**.` };
 }
 
-async function handleEvent(interaction, subcommand) {
+async function handleFlightsList(interaction) {
   const guild = requireGuild(interaction);
-  if (subcommand !== 'list') return { content: 'That event command has been removed. Use `/event list` or `/miles flight`.' };
   return eventListPayload(guild);
 }
 
@@ -196,7 +193,7 @@ async function eventListPayload(guild) {
   const scheduled = await guild.scheduledEvents.fetch().catch(() => new Map());
   const embed = new (require('discord.js').EmbedBuilder)()
     .setTitle('Emirates PTFS Flights and Events')
-    .setDescription('Use the event ID with `/miles flight`.')
+    .setDescription('Use the flight or event ID with `/flight-awards`.')
     .setColor(0xed4245);
   const counts = await Promise.all(events.slice(-20).map((event) => database.countInterest(event.id)));
   events.slice(-20).forEach((event, index) => {
@@ -212,7 +209,7 @@ async function handleMilesFlight(interaction) {
   const guild = requireGuild(interaction);
   requireManager(interaction);
   const eventId = parseEventId(interaction.options.getString('event_id', true));
-  if (!eventId) return { content: 'Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.' };
+  if (!eventId) return { content: 'Enter the numeric flight or event ID shown by `/flights-list`, for example `1` or `#1`.' };
   const botEvent = await database.getEvent(eventId);
   if (botEvent && botEvent.guild_id === guild.id) {
     const rows = await database.listInterest(eventId);
@@ -305,8 +302,8 @@ async function handleCommand(interaction) {
   const name = interaction.commandName;
   const subcommand = interaction.options.getSubcommand(false);
   if (name === 'account') return handleAccount(interaction, subcommand);
-  if (name === 'event') return handleEvent(interaction, subcommand);
-  if (name === 'miles') return handleMilesFlight(interaction);
+  if (name === 'flights-list') return handleFlightsList(interaction);
+  if (name === 'flight-awards') return handleMilesFlight(interaction);
   if (name === 'shop') return { embeds: [shopEmbed()], components: shopComponents(interaction.user.id) };
   return { content: 'Unknown command.' };
 }
