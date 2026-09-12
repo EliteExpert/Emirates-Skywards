@@ -16,14 +16,8 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/account inventory` shows purchased perks.
 - `/account set-tier` lets staff update a member's tier.
 - `/account add-miles` lets staff grant miles.
-- `/event create` posts an event with an **I'm Interested** button. Members choose Economy, Premium Economy, Business, or First after clicking it.
-- `/event interested` shows the people registered for an event, their class, tier, and projected award.
-- `/event award` calculates and grants miles once per event using both travel class and Skywards tier.
-- `/event list` lists recent event IDs and interest counts.
-- `/miles flight` grants miles to one member for a completed flight and records the flight reference.
-- `/miles event` reads the interested members of a bot-created event or native Discord scheduled event, then grants each attendee a personalized award.
-- `/flight create` posts a flight card with the same text hierarchy as the supplied reference: flight code, airline, departure, aircraft, terminal, check-in status, location, interested count, and event ID.
-- `/flight list` lists the same native and bot-created events available through `/event list`.
+- `/event list` lists recent flights and events, including native Discord scheduled events created by anyone.
+- `/miles flight` reads the interested members for the supplied event ID and awards each attendee personalized miles.
 - `/shop` displays interactive purchase buttons for PTFS perks.
 
 ## Award calculation
@@ -50,7 +44,7 @@ Skywards-tier multipliers:
 | Gold | 1.30× |
 | Platinum | 1.75× |
 
-For native Discord scheduled events, `/miles event` uses **1,000 base miles** unless another value is supplied. The attendee's Economy, Business, or First role determines their cabin multiplier; without one of those roles, the command's optional fallback class is used. The Blue, Silver, Gold, or Platinum role determines the tier multiplier, falling back to the saved account tier when no tier role is present. This keeps the event awards aligned with the shop prices, which range from **2,000** to **8,000 miles**.
+For native Discord scheduled events, `/miles flight` uses **1,000 base miles** unless another value is supplied. The attendee's Economy, Business, or First role determines their cabin multiplier; without one of those roles, the command's optional fallback class is used. The Blue, Silver, Gold, or Platinum role determines the tier multiplier, falling back to the saved account tier when no tier role is present. This keeps the event awards aligned with the shop prices, which range from **2,000** to **8,000 miles**.
 
 ## Setup
 
@@ -77,7 +71,5 @@ The bot reads native Discord scheduled events created by other users. Enable the
 ## Staff workflow
 
 1. A member runs `/account create`.
-2. A staff member posts a generic event with `/event create`, or a flight card with `/flight create`.
-3. Members click **I'm Interested** and select their travel class. Native Discord events created by any member are also discoverable through `/event list`.
-4. Staff use `/event interested event_id` to review registrations from either bot events or native Discord scheduled events.
-5. Staff run `/miles event event_id` to preview the role-based awards, then run it again with `confirm:True` once the event is complete. For native Discord events, the base award defaults to 1,000 miles.
+2. Members use Discord's native **Interested** control on a flight or event. Native Discord events created by any member are discoverable through `/event list`.
+3. Staff run `/miles flight event_id` to preview the role-based awards, then run it again with `confirm:True` once the event is complete. For native Discord events, the base award defaults to 1,000 miles.

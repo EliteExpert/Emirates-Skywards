@@ -16,6 +16,7 @@ const titleCase = (value) => value.replaceAll('_', ' ').replace(/\b\w/g, (charac
 const roleMention = (tier) => `<@&${TIER_ROLE_IDS[tier]}>`;
 const tierName = (tier) => TIER_DISPLAY_NAMES[tier] || tier;
 const assetPath = (tier) => path.resolve('assets', 'tiers', `${tier}.png`);
+const GENERAL_COLOR = 0xed4245;
 
 function accountMessage(account, inventory) {
   const tier = account.tier;
@@ -59,7 +60,7 @@ function shopEmbed() {
   return new EmbedBuilder()
     .setTitle('Emirates Skywards Shop')
     .setDescription('> “Make your miles work harder.”\n\nUse the buttons below to exchange miles for PTFS perks.')
-    .setColor(0x1f2937)
+    .setColor(GENERAL_COLOR)
     .addFields(...Object.values(SHOP_ITEMS).map((item) => ({
       name: `${item.name} — ${number(item.price)} miles`,
       value: item.description,
@@ -72,7 +73,7 @@ function eventEmbed(event, interestedCount) {
   const embed = new EmbedBuilder()
     .setTitle(`Emirates PTFS Event — ${event.name}`)
     .setDescription(`> “${event.description}”`)
-    .setColor(0x315b9a)
+    .setColor(GENERAL_COLOR)
     .addFields(
       { name: 'Base miles', value: `**${number(event.base_miles)}**`, inline: true },
       { name: 'Interested', value: `**${interestedCount}**`, inline: true },
@@ -87,7 +88,7 @@ function flightEmbed(event, interestedCount) {
   const embed = new EmbedBuilder()
     .setTitle(`${event.flight_code || event.name} · ${event.airline || 'Emirates'}`)
     .setDescription(`Departure · ${event.departure || event.location || 'TBD'} · ${event.aircraft || 'Aircraft TBD'} · Terminal ${event.terminal || 'TBD'} · Check-in ${event.check_in_status || 'Open'}`)
-    .setColor(0x315b9a)
+    .setColor(GENERAL_COLOR)
     .addFields(
       { name: 'Location', value: event.location || event.departure || 'TBD', inline: true },
       { name: 'Interested', value: `**${interestedCount}**`, inline: true },
@@ -102,7 +103,7 @@ function awardPreviewEmbed(event, rows) {
   const embed = new EmbedBuilder()
     .setTitle(`Interested passengers — ${event.name}`)
     .setDescription(`**${rows.length}** passenger(s) are registered.\nBase miles: **${number(event.base_miles)}** per passenger before multipliers.`)
-    .setColor(0x315b9a);
+    .setColor(GENERAL_COLOR);
   for (const [index, row] of rows.slice(0, 25).entries()) {
     const calculated = row.tier ? Math.round(Number(event.base_miles) * CLASS_MULTIPLIERS[row.travel_class] * TIER_MULTIPLIERS[row.tier]) : 0;
     embed.addFields({
@@ -120,7 +121,7 @@ function scheduledEventPreviewEmbed(event, rows, baseMiles = null) {
   const embed = new EmbedBuilder()
     .setTitle(`Discord event attendees — ${event.name}`)
     .setDescription(`> “${event.description || 'No description was provided for this Discord event.'}”\n\nEvent ID: \`${event.id}\`\nDiscord interest count: **${event.userCount ?? rows.length}**`)
-    .setColor(0x315b9a);
+    .setColor(GENERAL_COLOR);
   for (const [index, row] of rows.slice(0, 25).entries()) {
     const status = row.tier ? `${tierName(row.tier)} (${roleMention(row.tier)})` : 'No Skywards account';
     const lines = [`User ID: \`${row.user_id}\``, `Class: **${row.travel_class || 'Economy'}**`, `Status: **${status}**`];

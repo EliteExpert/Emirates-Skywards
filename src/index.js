@@ -30,7 +30,6 @@ const {
 const {
   accountComponents,
   eventComponents,
-  flightActionComponents,
   shopComponents,
   travelClassComponents,
 } = require('./ui');
@@ -59,37 +58,10 @@ function buildCommands() {
       .addSubcommand((sub) => sub.setName('add-miles').setDescription('Grant miles to a member')
         .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
         .addIntegerOption((option) => option.setName('miles').setDescription('Miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))),
-    new SlashCommandBuilder().setName('event').setDescription('Create and manage PTFS events')
-      .addSubcommand((sub) => sub.setName('create').setDescription('Post an event with an interest button')
-        .addStringOption((option) => option.setName('name').setDescription('Event name').setRequired(true).setMaxLength(80))
-        .addStringOption((option) => option.setName('description').setDescription('Description').setRequired(true).setMaxLength(500))
-        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))
-        .addStringOption((option) => option.setName('event_date').setDescription('Event date').setRequired(false).setMaxLength(80)))
-      .addSubcommand((sub) => sub.setName('list').setDescription('List recent PTFS events'))
-      .addSubcommand((sub) => sub.setName('interested').setDescription('View members interested in an event')
-        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true)))
-      .addSubcommand((sub) => sub.setName('award').setDescription('Award event miles using class and status multipliers')
-        .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true))
-        .addBooleanOption((option) => option.setName('confirm').setDescription('Apply the award').setRequired(false))),
-    new SlashCommandBuilder().setName('flight').setDescription('Create and manage Emirates PTFS flight cards')
-      .addSubcommand((sub) => sub.setName('create').setDescription('Post a flight card with an interest button')
-        .addStringOption((option) => option.setName('flight_code').setDescription('Flight code, for example FZ001').setRequired(true).setMaxLength(30))
-        .addStringOption((option) => option.setName('airline').setDescription('Airline').setRequired(true).setMaxLength(50))
-        .addStringOption((option) => option.setName('departure').setDescription('Departure airport').setRequired(true).setMaxLength(100))
-        .addStringOption((option) => option.setName('aircraft').setDescription('Aircraft').setRequired(true).setMaxLength(50))
-        .addStringOption((option) => option.setName('terminal').setDescription('Terminal').setRequired(true).setMaxLength(30))
-        .addStringOption((option) => option.setName('check_in').setDescription('Check-in status').setRequired(true).setMaxLength(40))
-        .addStringOption((option) => option.setName('location').setDescription('Location').setRequired(true).setMaxLength(100))
-        .addStringOption((option) => option.setName('description').setDescription('Flight description').setRequired(false).setMaxLength(500))
-        .addStringOption((option) => option.setName('event_date').setDescription('Event date').setRequired(false).setMaxLength(80))
-        .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles').setRequired(false).setMinValue(1).setMaxValue(1_000_000)))
-      .addSubcommand((sub) => sub.setName('list').setDescription('List flight cards and native Discord events')),
+    new SlashCommandBuilder().setName('event').setDescription('List flights and events')
+      .addSubcommand((sub) => sub.setName('list').setDescription('List recent flights and events')),
     new SlashCommandBuilder().setName('miles').setDescription('Award Skywards miles for flights and events')
-      .addSubcommand((sub) => sub.setName('flight').setDescription('Award miles to one member for a completed flight')
-        .addUserOption((option) => option.setName('member').setDescription('Member').setRequired(true))
-        .addIntegerOption((option) => option.setName('miles').setDescription('Miles').setRequired(true).setMinValue(1).setMaxValue(1_000_000))
-        .addStringOption((option) => option.setName('flight_reference').setDescription('Flight reference').setRequired(false).setMaxLength(100)))
-      .addSubcommand((sub) => sub.setName('event').setDescription('Award miles to everyone interested in an event')
+      .addSubcommand((sub) => sub.setName('flight').setDescription('Award miles to everyone interested in a flight or event')
         .addStringOption((option) => option.setName('event_id').setDescription('Event ID').setRequired(true))
         .addIntegerOption((option) => option.setName('base_miles').setDescription('Base miles for native events; defaults to 1,000').setRequired(false).setMinValue(1).setMaxValue(1_000_000))
         .addStringOption((option) => option.setName('travel_class').setDescription('Fallback class when no class role exists').setRequired(false).addChoices(...travelChoices))
@@ -215,52 +187,17 @@ async function handleAccount(interaction, subcommand) {
 
 async function handleEvent(interaction, subcommand) {
   const guild = requireGuild(interaction);
-  if (subcommand === 'create') {
-    requireManager(interaction);
-    const event = await database.createEvent({
-      guildId: guild.id, channelId: interaction.channelId, name: interaction.options.getString('name', true),
-      description: interaction.options.getString('description', true), baseMiles: interaction.options.getInteger('base_miles', true),
-      eventDate: interaction.options.getString('event_date'), createdBy: interaction.user.id,
-    });
-    return { embeds: [eventEmbed(event, 0)], components: eventComponents(event.id), eventToSaveId: event.id };
-  }
-  if (subcommand === 'list') return eventListPayload(guild);
-  const eventId = parseEventId(interaction.options.getString('event_id', true));
-  if (!eventId) return { content: 'Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.' };
-  const event = await database.getEvent(eventId);
-  if (subcommand === 'interested') {
-    requireManager(interaction);
-    if (event && event.guild_id === guild.id) {
-      const rows = await database.listInterest(eventId);
-      if (!rows.length) return { content: `No one has clicked interested for **${event.name}** yet.` };
-      await applyRoleProfiles(guild, rows);
-      return { embeds: [awardPreviewEmbed(event, rows)] };
-    }
-    const scheduled = await fetchScheduledEvent(guild, eventId);
-    if (!scheduled) return { content: 'No bot event or Discord scheduled event with that ID exists in this server.' };
-    const rows = await fetchScheduledRows(scheduled);
-    if (!rows.length) return { content: `No one has clicked interested for **${scheduled.name}** yet.` };
-    return { embeds: [scheduledEventPreviewEmbed(scheduled, rows)] };
-  }
-  requireManager(interaction);
-  if (!event || event.guild_id !== guild.id) return { content: 'No event with that ID exists in this server.' };
-  const rows = await database.listInterest(eventId);
-  if (!rows.length) return { content: 'There are no interested members to award.' };
-  const { classOverrides, tierOverrides } = await applyRoleProfiles(guild, rows);
-  if (!interaction.options.getBoolean('confirm')) return { embeds: [awardPreviewEmbed(event, rows)], content: 'Set `confirm` to **True** to apply these awards. This can only be done once per event.' };
-  const result = await database.awardEvent(eventId, classOverrides, tierOverrides);
-  if (result.status === 'already_awarded') return { content: 'Miles for this event have already been awarded.' };
-  const total = result.awards.reduce((sum, award) => sum + award.miles, 0);
-  return { content: `**Awards complete.** Granted **${number(total)} miles** across **${result.awards.length}** passenger(s).` };
+  if (subcommand !== 'list') return { content: 'That event command has been removed. Use `/event list` or `/miles flight`.' };
+  return eventListPayload(guild);
 }
 
 async function eventListPayload(guild) {
   const events = await database.listEvents(guild.id);
   const scheduled = await guild.scheduledEvents.fetch().catch(() => new Map());
   const embed = new (require('discord.js').EmbedBuilder)()
-    .setTitle('Emirates PTFS Events')
-    .setDescription('Use the event ID with `/event interested` or `/miles event`.')
-    .setColor(0x315b9a);
+    .setTitle('Emirates PTFS Flights and Events')
+    .setDescription('Use the event ID with `/miles flight`.')
+    .setColor(0xed4245);
   const counts = await Promise.all(events.slice(-20).map((event) => database.countInterest(event.id)));
   events.slice(-20).forEach((event, index) => {
     embed.addFields({ name: `${event.id} — ${event.name}`, value: event.awarded_at ? 'Awarded' : `${counts[index]} interested` });
@@ -271,36 +208,9 @@ async function eventListPayload(guild) {
   return { embeds: [embed] };
 }
 
-async function handleFlight(interaction, subcommand) {
-  const guild = requireGuild(interaction);
-  if (subcommand === 'list') return eventListPayload(guild);
-  requireManager(interaction);
-  const flightCode = interaction.options.getString('flight_code', true);
-  const airline = interaction.options.getString('airline', true);
-  const departure = interaction.options.getString('departure', true);
-  const event = await database.createEvent({
-    guildId: guild.id, channelId: interaction.channelId, name: `${flightCode} · ${airline}`,
-    description: interaction.options.getString('description') || `Departure · ${departure}`,
-    baseMiles: interaction.options.getInteger('base_miles') || DEFAULT_EVENT_BASE_MILES,
-    eventDate: interaction.options.getString('event_date'), createdBy: interaction.user.id, eventType: 'FLIGHT',
-    flightCode, airline, departure, aircraft: interaction.options.getString('aircraft', true),
-    terminal: interaction.options.getString('terminal', true), checkInStatus: interaction.options.getString('check_in', true),
-    location: interaction.options.getString('location', true),
-  });
-  const { eventEmbed: makeEmbed } = require('./embeds');
-  return { embeds: [makeEmbed(event, 0)], components: flightActionComponents(event.id), eventToSaveId: event.id };
-}
-
-async function handleMiles(interaction, subcommand) {
+async function handleMilesFlight(interaction) {
   const guild = requireGuild(interaction);
   requireManager(interaction);
-  if (subcommand === 'flight') {
-    const user = interaction.options.getUser('member', true);
-    const miles = interaction.options.getInteger('miles', true);
-    const result = await database.addFlightMiles(user.id, miles, interaction.options.getString('flight_reference') || 'PTFS Flight', interaction.user.id);
-    if (result === 'missing_account') return { content: 'That member needs to create a Skywards account before receiving flight miles.' };
-    return { content: `Awarded **${number(miles)} miles** to **${user.displayName}** for *${interaction.options.getString('flight_reference') || 'PTFS Flight'}*.` };
-  }
   const eventId = parseEventId(interaction.options.getString('event_id', true));
   if (!eventId) return { content: 'Enter the numeric event ID shown by `/event list`, for example `1` or `#1`.' };
   const botEvent = await database.getEvent(eventId);
@@ -351,6 +261,12 @@ async function handleComponent(interaction) {
     }
     return interaction.editReply({ content: `You are marked **Interested** for **${selected}**.` });
   }
+  if (interaction.isButton() && type === 'account' && action === 'refresh') {
+    await interaction.deferUpdate();
+    const account = await database.getAccount(id);
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
+  }
   if (interaction.isButton() && type === 'account' && action === 'shop') {
     await interaction.deferReply({ ephemeral: true });
     const account = await database.getAccount(id);
@@ -390,16 +306,14 @@ async function handleCommand(interaction) {
   const subcommand = interaction.options.getSubcommand(false);
   if (name === 'account') return handleAccount(interaction, subcommand);
   if (name === 'event') return handleEvent(interaction, subcommand);
-  if (name === 'flight') return handleFlight(interaction, subcommand);
-  if (name === 'miles') return handleMiles(interaction, subcommand);
+  if (name === 'miles') return handleMilesFlight(interaction);
   if (name === 'shop') return { embeds: [shopEmbed()], components: shopComponents(interaction.user.id) };
   return { content: 'Unknown command.' };
 }
 
 function isPublicCommand(interaction) {
-  return (interaction.commandName === 'account' && ['create', 'view', 'inventory'].includes(interaction.options.getSubcommand(false)))
-    || (interaction.commandName === 'event' && interaction.options.getSubcommand(false) === 'create')
-    || (interaction.commandName === 'flight' && interaction.options.getSubcommand(false) === 'create');
+  return interaction.commandName === 'account'
+    && ['create', 'view', 'inventory'].includes(interaction.options.getSubcommand(false));
 }
 
 async function respondError(interaction, error) {
@@ -434,6 +348,8 @@ client.once(Events.ClientReady, async (ready) => {
   try {
     const commands = buildCommands().map((command) => command.toJSON());
     if (appSettings.testGuildId) {
+      // Replace the global set as well, so removed commands do not linger from an older deployment.
+      await ready.application.commands.set(commands);
       const guild = ready.guilds.cache.get(appSettings.testGuildId);
       if (guild) await guild.commands.set(commands);
       else await ready.application.commands.set(commands, appSettings.testGuildId);

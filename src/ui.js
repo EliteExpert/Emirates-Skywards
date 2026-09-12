@@ -10,6 +10,7 @@ const { SHOP_ITEMS, TIERS, TRAVEL_CLASSES } = require('./config');
 function accountComponents(userId, tier) {
   const nextTier = TIERS[TIERS.indexOf(tier) + 1];
   const buttons = [
+    new ButtonBuilder().setCustomId(`account:refresh:${userId}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`account:shop:${userId}`).setLabel('Shop').setStyle(ButtonStyle.Secondary),
   ];
   if (nextTier) {
@@ -46,8 +47,4 @@ function travelClassComponents(eventId) {
   return [new ActionRowBuilder().addComponents(menu)];
 }
 
-function flightActionComponents(eventId) {
-  return eventComponents(eventId);
-}
-
-module.exports = { accountComponents, shopComponents, eventComponents, flightActionComponents, travelClassComponents };
+module.exports = { accountComponents, shopComponents, eventComponents, travelClassComponents };
