@@ -19,6 +19,17 @@ const tierName = (tier) => TIER_DISPLAY_NAMES[tier] || tier;
 const assetPath = (tier) => path.resolve('assets', 'tiers', `${tier}.png`);
 const GENERAL_COLOR = 0xed4245;
 
+function formatAvailability(availableAt) {
+  if (!availableAt) return '**Available now**';
+  const timestamp = new Date(availableAt);
+  const remainingMs = timestamp.getTime() - Date.now();
+  if (remainingMs <= 0) return '**Available now**';
+  const totalMinutes = Math.ceil(remainingMs / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = String(totalMinutes % 60).padStart(2, '0');
+  return `**Available in ${hours}:${minutes}hrs** · <t:${Math.floor(timestamp.getTime() / 1000)}:R>`;
+}
+
 function accountMessage(account, inventory) {
   const tier = account.tier;
   const filename = `${tier}.png`;
@@ -57,14 +68,14 @@ function accountInventoryEmbed(account, inventory) {
   return embed.setFooter({ text: 'Use /shop to browse available perks.' });
 }
 
-function shopEmbed() {
+function shopEmbed(cooldowns = {}) {
   return new EmbedBuilder()
     .setTitle('Emirates Skywards Shop')
     .setDescription('> “Make your miles work harder.”\n\nUse the buttons below to exchange miles for PTFS perks.')
     .setColor(GENERAL_COLOR)
-    .addFields(...Object.values(SHOP_ITEMS).map((item) => ({
+    .addFields(...Object.entries(SHOP_ITEMS).map(([productId, item]) => ({
       name: `${item.name} — ${number(item.price)} miles`,
-      value: item.description,
+      value: `${item.description}\n\n${formatAvailability(cooldowns[productId])}`,
     })))
     .setFooter({ text: 'Purchases are added to your Skywards account inventory.' });
 }
@@ -143,6 +154,7 @@ module.exports = {
   eventEmbed,
   awardPreviewEmbed,
   scheduledEventPreviewEmbed,
+  formatAvailability,
   roleMention,
   tierName,
   number,

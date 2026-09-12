@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const crypto = require('node:crypto');
+const { SHOP_COOLDOWN_HOURS } = require('./config');
 
 function normalizeDatabaseUrl(value) {
   if (value.startsWith('postgres://')) return `postgresql://${value.slice('postgres://'.length)}`;
@@ -288,11 +289,39 @@ class Database {
     return rows;
   }
 
+  async getShopCooldowns(userId) {
+    const { rows } = await this.pool.query(
+      `SELECT DISTINCT ON (product_id)
+        product_id,
+        purchased_at + make_interval(hours => $2::int) AS available_at
+       FROM purchases
+       WHERE user_id = $1
+       ORDER BY product_id, purchased_at DESC`,
+      [String(userId), SHOP_COOLDOWN_HOURS],
+    );
+    const now = Date.now();
+    return Object.fromEntries(rows
+      .filter((row) => new Date(row.available_at).getTime() > now)
+      .map((row) => [row.product_id, row.available_at]));
+  }
+
   async purchase(userId, productId, cost) {
     return this.transaction(async (client) => {
       const account = await client.query('SELECT miles FROM accounts WHERE user_id = $1 FOR UPDATE', [String(userId)]);
-      if (!account.rowCount) return 'missing_account';
-      if (Number(account.rows[0].miles) < cost) return 'insufficient_miles';
+      if (!account.rowCount) return { status: 'missing_account' };
+      const cooldown = await client.query(
+        `SELECT purchased_at + make_interval(hours => $3::int) AS available_at
+         FROM purchases
+         WHERE user_id = $1 AND product_id = $2
+         ORDER BY purchased_at DESC
+         LIMIT 1`,
+        [String(userId), productId, SHOP_COOLDOWN_HOURS],
+      );
+      const availableAt = cooldown.rows[0]?.available_at;
+      if (availableAt && new Date(availableAt).getTime() > Date.now()) {
+        return { status: 'cooldown', availableAt };
+      }
+      if (Number(account.rows[0].miles) < cost) return { status: 'insufficient_miles' };
       await client.query('UPDATE accounts SET miles = miles - $1 WHERE user_id = $2', [cost, String(userId)]);
       await client.query(
         `INSERT INTO inventory (user_id, product_id, quantity) VALUES ($1, $2, 1)
@@ -303,7 +332,7 @@ class Database {
         'INSERT INTO purchases (user_id, product_id, cost, purchased_at) VALUES ($1, $2, $3, NOW())',
         [String(userId), productId, cost],
       );
-      return 'purchased';
+      return { status: 'purchased' };
     });
   }
 

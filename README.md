@@ -20,6 +20,8 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 - `/flight-awards` reads the interested members for the supplied flight or event ID and awards each attendee personalized miles.
 - `/shop` displays interactive purchase buttons for PTFS perks publicly.
 
+Each shop item has an independent **48-hour cooldown per member**. The shop shows the remaining time and disables an item until it becomes available again.
+
 Administrative commands (`/account set-tier`, `/account add-miles`, and `/flight-awards`) require the Discord **Administrator** permission or one of these staff roles: `<@&1416276747246244013>`, `<@&1464239438183010469>`, or `<@&1473279339817730170>`.
 
 ## Award calculation

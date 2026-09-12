@@ -89,6 +89,7 @@ const SHOP_ITEMS = {
 };
 
 const DEFAULT_EVENT_BASE_MILES = 1000;
+const SHOP_COOLDOWN_HOURS = 48;
 
 function settings() {
   const testGuildId = process.env.TEST_GUILD_ID?.trim();
@@ -114,5 +115,6 @@ module.exports = {
   TIER_BENEFITS,
   SHOP_ITEMS,
   DEFAULT_EVENT_BASE_MILES,
+  SHOP_COOLDOWN_HOURS,
   settings,
 };

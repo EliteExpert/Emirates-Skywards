@@ -19,12 +19,16 @@ function accountComponents(userId, tier) {
   return [new ActionRowBuilder().addComponents(buttons)];
 }
 
-function shopComponents(userId) {
+function shopComponents(userId, cooldowns = {}) {
   const entries = Object.entries(SHOP_ITEMS);
   const rows = [];
-  for (let index = 0; index < entries.length; index += 5) {
-    rows.push(new ActionRowBuilder().addComponents(entries.slice(index, index + 5).map(([id, item]) =>
-      new ButtonBuilder().setCustomId(`shop:buy:${id}:${userId}`).setLabel(`Buy ${item.name}`).setStyle(ButtonStyle.Success))));
+  for (let index = 0; index < entries.length; index += 3) {
+    rows.push(new ActionRowBuilder().addComponents(entries.slice(index, index + 3).map(([id, item]) =>
+      new ButtonBuilder()
+        .setCustomId(`shop:buy:${id}:${userId}`)
+        .setLabel(`Buy ${item.name}`)
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(Boolean(cooldowns[id] && new Date(cooldowns[id]).getTime() > Date.now())))));
   }
   rows.push(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`shop:back:${userId}`).setLabel('Back').setStyle(ButtonStyle.Secondary),

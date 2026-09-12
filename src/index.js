@@ -25,6 +25,7 @@ const {
   eventEmbed,
   scheduledEventPreviewEmbed,
   shopEmbed,
+  formatAvailability,
   number,
   tierName,
 } = require('./embeds');
@@ -241,6 +242,15 @@ async function handleMilesFlight(interaction) {
   return { content: `**Event awards complete.** Granted **${number(total)} miles** across **${result.awards.length}** passenger(s).${skipped}` };
 }
 
+async function shopPayload(userId) {
+  const cooldowns = await database.getShopCooldowns(userId);
+  return {
+    embeds: [shopEmbed(cooldowns)],
+    components: shopComponents(userId, cooldowns),
+    attachments: [],
+  };
+}
+
 async function handleComponent(interaction) {
   const [type, action, id, ownerId] = interaction.customId.split(':');
   if (interaction.isButton() && type === 'event' && action === 'interest') {
@@ -273,7 +283,7 @@ async function handleComponent(interaction) {
     await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
-    return interaction.editReply({ embeds: [shopEmbed()], components: shopComponents(account.user_id) });
+    return interaction.editReply(await shopPayload(account.user_id));
   }
   if (interaction.isButton() && type === 'account' && action === 'upgrade') {
     if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can upgrade this account.', ephemeral: true });
@@ -292,8 +302,10 @@ async function handleComponent(interaction) {
     const account = await database.getAccount(ownerId);
     if (!item || !account || ownerId !== interaction.user.id) return interaction.editReply({ content: 'This shop session belongs to another member.' });
     const result = await database.purchase(ownerId, id, item.price);
-    if (result === 'insufficient_miles') return interaction.editReply({ content: `You need **${number(item.price)} miles** to purchase **${item.name}**.` });
-    if (result === 'missing_account') return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    if (result.status === 'cooldown') return interaction.editReply({ content: `${item.name} is on cooldown. ${formatAvailability(result.availableAt)}.` });
+    if (result.status === 'insufficient_miles') return interaction.editReply({ content: `You need **${number(item.price)} miles** to purchase **${item.name}**.` });
+    if (result.status === 'missing_account') return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    await interaction.message?.edit(await shopPayload(ownerId)).catch(() => {});
     return interaction.editReply({ content: `Purchased **${item.name}** for **${number(item.price)} miles**.` });
   }
   if (interaction.isButton() && type === 'shop' && action === 'back') {
@@ -312,7 +324,7 @@ async function handleCommand(interaction) {
   if (name === 'account') return handleAccount(interaction, subcommand);
   if (name === 'flights-list') return handleFlightsList(interaction);
   if (name === 'flight-awards') return handleMilesFlight(interaction);
-  if (name === 'shop') return { embeds: [shopEmbed()], components: shopComponents(interaction.user.id) };
+  if (name === 'shop') return shopPayload(interaction.user.id);
   return { content: 'Unknown command.' };
 }
 
