@@ -336,11 +336,11 @@ async function handleComponent(interaction) {
     if (!TIERS.includes(account.tier)) return interaction.editReply({ content: 'Your stored tier is not a valid Skywards tier. Ask staff to fix it with `/account set-tier`.' });
     const nextTier = TIERS[TIERS.indexOf(account.tier) + 1];
     if (!nextTier) return interaction.editReply({ content: 'You are already at the highest Skywards tier.' });
-    const requiredMiles = TIER_MINIMUM_MILES[nextTier];
-    const result = await database.upgradeTier(id, nextTier, requiredMiles);
+    const upgradeCost = TIER_MINIMUM_MILES[nextTier];
+    const result = await database.upgradeTier(id, nextTier, upgradeCost);
     if (result.status === 'insufficient_miles') {
       return interaction.followUp({
-        content: `You need **${number(requiredMiles)} available miles** to upgrade to **${TIER_DISPLAY_NAMES[nextTier]}**. You have **${number(result.miles)}**. Earn miles on PTFS flights and events, then try again.`,
+        content: `Upgrading to **${TIER_DISPLAY_NAMES[nextTier]}** costs **${number(upgradeCost)} miles**. You have **${number(result.miles)}**. Earn miles on PTFS flights and events, then try again.`,
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -348,7 +348,9 @@ async function handleComponent(interaction) {
     const roleSynced = await syncTierRole(interaction.guild, id, nextTier);
     const upgraded = await database.getAccount(id);
     await interaction.editReply({ ...accountMessage(upgraded, await database.getInventory(id)), components: accountComponents(upgraded) });
-    if (!roleSynced) await interaction.followUp({ content: ROLE_SYNC_NOTE, flags: MessageFlags.Ephemeral }).catch(() => {});
+    let note = `✅ Upgraded to **${TIER_DISPLAY_NAMES[nextTier]}** for **${number(upgradeCost)} miles**. You now have **${number(upgraded.miles)} miles**.`;
+    if (!roleSynced) note += ` ${ROLE_SYNC_NOTE}`;
+    await interaction.followUp({ content: note, flags: MessageFlags.Ephemeral }).catch(() => {});
     return;
   }
   if (interaction.isButton() && type === 'shop' && action === 'buy') {

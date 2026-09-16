@@ -24,16 +24,16 @@ Each shop item has an independent **48-hour cooldown per member**. The shop show
 
 ## Tiers and upgrades
 
-Skywards tiers follow the official minimum mile thresholds:
+Upgrading to a higher tier **spends miles**, which are deducted from the member's available balance:
 
-| Tier | Minimum available miles |
+| Tier | Upgrade cost |
 | --- | ---: |
-| Blue | 0 |
-| Silver | 1,500 |
-| Gold | 3,500 |
-| Platinum | 7,000 |
+| Blue | Starting tier |
+| Silver | 1,500 miles |
+| Gold | 3,500 miles |
+| Platinum | 7,000 miles |
 
-The account dashboard's **Upgrade** button only advances a member to the next tier once their available miles reach the next tier's threshold; the button is disabled until then and the upgrade is re-verified server-side. Staff can still set any tier directly with `/account set-tier`.
+The account dashboard's **Upgrade** button deducts the next tier's cost from the member's available miles and advances them one tier; the button stays disabled until they can afford it and the purchase is re-verified server-side inside a transaction. Staff can still set any tier directly with `/account set-tier`, which is free of charge.
 
 The bot keeps Discord roles and stored tiers in sync: the starting tier role is granted when the account is created, tier changes (upgrade or staff set-tier) reapply the correct role and remove stale tier roles, and `/account inventory` and `/account view` re-check the member's tier roles before displaying anything. For flight awards, a member's tier roles take priority over the stored tier, falling back to the stored tier when no tier role is present.
 
