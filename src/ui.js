@@ -16,7 +16,7 @@ function accountComponents(account) {
   if (nextTier) {
     buttons.unshift(new ButtonBuilder()
       .setCustomId(`account:upgrade:${account.user_id}`)
-      .setLabel(`Upgrade to ${TIER_DISPLAY_NAMES[nextTier]}`)
+      .setLabel(`Upgrade to ${TIER_DISPLAY_NAMES[nextTier]} (${TIER_MINIMUM_MILES[nextTier].toLocaleString('en-US')} miles)`)
       .setStyle(ButtonStyle.Success)
       .setDisabled(Number(account.miles || 0) < TIER_MINIMUM_MILES[nextTier]));
   }

@@ -153,15 +153,18 @@ class Database {
     await this.pool.query('UPDATE accounts SET tier = $1 WHERE user_id = $2', [tier, String(userId)]);
   }
 
-  async upgradeTier(userId, nextTier, minimumMiles) {
+  async upgradeTier(userId, nextTier, cost) {
     this.assertValidTier(nextTier);
     return this.transaction(async (client) => {
       const { rows } = await client.query('SELECT miles FROM accounts WHERE user_id = $1 FOR UPDATE', [String(userId)]);
       if (!rows.length) return { status: 'missing_account', miles: 0 };
       const miles = Number(rows[0].miles);
-      if (miles < minimumMiles) return { status: 'insufficient_miles', miles };
-      await client.query('UPDATE accounts SET tier = $1 WHERE user_id = $2', [nextTier, String(userId)]);
-      return { status: 'upgraded', miles };
+      if (miles < cost) return { status: 'insufficient_miles', miles };
+      await client.query(
+        'UPDATE accounts SET miles = miles - $1, tier = $2 WHERE user_id = $3',
+        [cost, nextTier, String(userId)],
+      );
+      return { status: 'upgraded', miles: miles - cost };
     });
   }
 
