@@ -5,16 +5,20 @@ const {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } = require('discord.js');
-const { SHOP_ITEMS, TIERS, TRAVEL_CLASSES } = require('./config');
+const { SHOP_ITEMS, TIER_DISPLAY_NAMES, TIER_MINIMUM_MILES, TIERS, TRAVEL_CLASSES } = require('./config');
 
-function accountComponents(userId, tier) {
-  const nextTier = TIERS[TIERS.indexOf(tier) + 1];
+function accountComponents(account) {
+  const nextTier = TIERS[TIERS.indexOf(account.tier) + 1];
   const buttons = [
-    new ButtonBuilder().setCustomId(`account:refresh:${userId}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`account:shop:${userId}`).setLabel('Shop').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`account:refresh:${account.user_id}`).setLabel('Refresh').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`account:shop:${account.user_id}`).setLabel('Shop').setStyle(ButtonStyle.Secondary),
   ];
   if (nextTier) {
-    buttons.unshift(new ButtonBuilder().setCustomId(`account:upgrade:${userId}`).setLabel('Upgrade to next tier').setStyle(ButtonStyle.Success));
+    buttons.unshift(new ButtonBuilder()
+      .setCustomId(`account:upgrade:${account.user_id}`)
+      .setLabel(`Upgrade to ${TIER_DISPLAY_NAMES[nextTier]}`)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(Number(account.miles || 0) < TIER_MINIMUM_MILES[nextTier]));
   }
   return [new ActionRowBuilder().addComponents(buttons)];
 }

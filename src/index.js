@@ -1,7 +1,9 @@
 const {
   Client,
+  EmbedBuilder,
   GatewayIntentBits,
   Events,
+  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
 } = require('discord.js');
@@ -13,6 +15,7 @@ const {
   SHOP_ITEMS,
   TIERS,
   TIER_DISPLAY_NAMES,
+  TIER_MINIMUM_MILES,
   TIER_ROLE_IDS,
   TRAVEL_CLASS_ROLE_IDS,
   TRAVEL_CLASSES,
@@ -112,6 +115,36 @@ async function findMember(guild, userId) {
   return guild.members.cache.get(String(userId)) || guild.members.fetch(String(userId)).catch(() => null);
 }
 
+const ROLE_SYNC_NOTE = '⚠️ I could not update their Discord roles. Give me the **Manage Roles** permission and move my bot role above the Skywards tier roles.';
+
+async function syncTierRole(guild, userId, tier) {
+  const targetRoleId = TIER_ROLE_IDS[tier];
+  if (!guild || !targetRoleId) return false;
+  const member = await findMember(guild, userId);
+  if (!member) return false;
+  const currentRoleIds = memberRoleIds(member);
+  const staleRoleIds = Object.values(TIER_ROLE_IDS)
+    .filter((roleId) => roleId !== targetRoleId && currentRoleIds.has(roleId));
+  try {
+    if (staleRoleIds.length) await member.roles.remove(staleRoleIds, 'Skywards tier sync');
+    if (!currentRoleIds.has(targetRoleId)) await member.roles.add(targetRoleId, 'Skywards tier sync');
+    return true;
+  } catch (error) {
+    console.error(`Could not sync the ${tier} tier role for ${userId}:`, error.message);
+    return false;
+  }
+}
+
+// Keeps the stored tier in step with the member's tier roles. A missing tier
+// role falls back to the stored tier instead of demoting the member.
+async function reconcileTier(member, account) {
+  if (!member?.roles?.cache) return account;
+  const resolved = resolveTier(member, null);
+  if (!resolved || resolved === account.tier) return account;
+  await database.updateTier(account.user_id, resolved);
+  return { ...account, tier: resolved };
+}
+
 async function applyRoleProfiles(guild, rows) {
   const classOverrides = {};
   const tierOverrides = {};
@@ -161,17 +194,24 @@ async function handleAccount(interaction, subcommand) {
     const existing = await database.getAccount(interaction.user.id);
     if (existing) return { content: `You already have a Skywards account: \`${existing.skywards_number}\`.` };
     const account = await database.createAccount(interaction.user.id, interaction.user.displayName);
-    return { ...accountMessage(account, []), components: accountComponents(account.user_id, account.tier) };
+    const roleAssigned = await syncTierRole(interaction.guild, account.user_id, account.tier);
+    const note = interaction.guild && !roleAssigned ? ` ${ROLE_SYNC_NOTE}` : '';
+    return { ...(note && { content: note }), ...accountMessage(account, []), components: accountComponents(account) };
   }
   if (subcommand === 'view') {
     const account = await database.getAccount(user.id);
     if (!account) return { content: `${user.id === interaction.user.id ? 'You do not have' : 'That member does not have'} a Skywards account yet. Use \`/account create\` first.` };
-    return { ...accountMessage(account, await database.getInventory(user.id)), components: accountComponents(account.user_id, account.tier) };
+    const member = interaction.guild
+      ? (user.id === interaction.user.id ? interaction.member : await findMember(interaction.guild, user.id))
+      : null;
+    const fresh = await reconcileTier(member, account);
+    return { ...accountMessage(fresh, await database.getInventory(user.id)), components: accountComponents(fresh) };
   }
   if (subcommand === 'inventory') {
     const account = await database.getAccount(interaction.user.id);
     if (!account) return { content: 'You do not have a Skywards account yet. Use `/account create` first.' };
-    return { embeds: [accountInventoryEmbed(account, await database.getInventory(interaction.user.id))] };
+    const fresh = await reconcileTier(interaction.guild ? interaction.member : null, account);
+    return { embeds: [accountInventoryEmbed(fresh, await database.getInventory(interaction.user.id))] };
   }
   requireGuild(interaction);
   requireManager(interaction);
@@ -180,7 +220,8 @@ async function handleAccount(interaction, subcommand) {
   if (subcommand === 'set-tier') {
     const tier = interaction.options.getString('tier', true);
     await database.updateTier(user.id, tier);
-    return { content: `**${user.displayName}** is now a **${TIER_DISPLAY_NAMES[tier]}** member (<@&${TIER_ROLE_IDS[tier]}>).` };
+    const roleAssigned = await syncTierRole(interaction.guild, user.id, tier);
+    return { content: `**${user.displayName}** is now a **${TIER_DISPLAY_NAMES[tier]}** member (<@&${TIER_ROLE_IDS[tier]}>).${roleAssigned ? '' : ` ${ROLE_SYNC_NOTE}`}` };
   }
   const miles = interaction.options.getInteger('miles', true);
   await database.addMiles(user.id, miles);
@@ -195,7 +236,7 @@ async function handleFlightsList(interaction) {
 async function eventListPayload(guild) {
   const events = await database.listEvents(guild.id);
   const scheduled = await guild.scheduledEvents.fetch().catch(() => new Map());
-  const embed = new (require('discord.js').EmbedBuilder)()
+  const embed = new EmbedBuilder()
     .setTitle('Emirates PTFS Flights and Events')
     .setDescription('Use the flight or event ID with `/flight-awards`.')
     .setColor(0xed4245);
@@ -254,53 +295,68 @@ async function shopPayload(userId) {
 async function handleComponent(interaction) {
   const [type, action, id, ownerId] = interaction.customId.split(':');
   if (interaction.isButton() && type === 'event' && action === 'interest') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     return interaction.editReply({ content: 'Choose your travel class.', components: travelClassComponents(id) });
   }
   if (interaction.isStringSelectMenu() && type === 'event' && action === 'class') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const account = await database.getAccount(interaction.user.id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    const event = await database.getEvent(id);
+    if (!event) return interaction.editReply({ content: 'That event no longer exists or was removed.' });
     const selected = interaction.values[0];
     const added = await database.addInterest(id, interaction.user.id, selected);
     if (!added) return interaction.editReply({ content: 'You are already registered as interested in this event.' });
-    const event = await database.getEvent(id);
-    if (event && interaction.message) {
+    if (interaction.message) {
       const count = await database.countInterest(id);
       await interaction.message.edit({ embeds: [eventEmbed(event, count)], components: eventComponents(id) }).catch(() => {});
     }
     return interaction.editReply({ content: `You are marked **Interested** for **${selected}**.` });
   }
   if (interaction.isButton() && type === 'account' && action === 'refresh') {
-    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can use these dashboard buttons.', ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can use these dashboard buttons.', flags: MessageFlags.Ephemeral });
     await interaction.deferUpdate();
-    const account = await database.getAccount(id);
+    let account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
-    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
+    account = await reconcileTier(interaction.guild ? interaction.member : null, account);
+    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(account) });
   }
   if (interaction.isButton() && type === 'account' && action === 'shop') {
-    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can open this shop session.', ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can open this shop session.', flags: MessageFlags.Ephemeral });
     await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     return interaction.editReply(await shopPayload(account.user_id));
   }
   if (interaction.isButton() && type === 'account' && action === 'upgrade') {
-    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can upgrade this account.', ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can upgrade this account.', flags: MessageFlags.Ephemeral });
     await interaction.deferUpdate();
     const account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    if (!TIERS.includes(account.tier)) return interaction.editReply({ content: 'Your stored tier is not a valid Skywards tier. Ask staff to fix it with `/account set-tier`.' });
     const nextTier = TIERS[TIERS.indexOf(account.tier) + 1];
     if (!nextTier) return interaction.editReply({ content: 'You are already at the highest Skywards tier.' });
-    await database.updateTier(id, nextTier);
+    const requiredMiles = TIER_MINIMUM_MILES[nextTier];
+    const result = await database.upgradeTier(id, nextTier, requiredMiles);
+    if (result.status === 'insufficient_miles') {
+      return interaction.followUp({
+        content: `You need **${number(requiredMiles)} available miles** to upgrade to **${TIER_DISPLAY_NAMES[nextTier]}**. You have **${number(result.miles)}**. Earn miles on PTFS flights and events, then try again.`,
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    if (result.status === 'missing_account') return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
+    const roleSynced = await syncTierRole(interaction.guild, id, nextTier);
     const upgraded = await database.getAccount(id);
-    return interaction.editReply({ ...accountMessage(upgraded, await database.getInventory(id)), components: accountComponents(id, upgraded.tier) });
+    await interaction.editReply({ ...accountMessage(upgraded, await database.getInventory(id)), components: accountComponents(upgraded) });
+    if (!roleSynced) await interaction.followUp({ content: ROLE_SYNC_NOTE, flags: MessageFlags.Ephemeral }).catch(() => {});
+    return;
   }
   if (interaction.isButton() && type === 'shop' && action === 'buy') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const item = SHOP_ITEMS[id];
+    if (!item || ownerId !== interaction.user.id) return interaction.editReply({ content: 'This shop session belongs to another member.' });
     const account = await database.getAccount(ownerId);
-    if (!item || !account || ownerId !== interaction.user.id) return interaction.editReply({ content: 'This shop session belongs to another member.' });
+    if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
     const result = await database.purchase(ownerId, id, item.price);
     if (result.status === 'cooldown') return interaction.editReply({ content: `${item.name} is on cooldown. ${formatAvailability(result.availableAt)}.` });
     if (result.status === 'insufficient_miles') return interaction.editReply({ content: `You need **${number(item.price)} miles** to purchase **${item.name}**.` });
@@ -309,11 +365,12 @@ async function handleComponent(interaction) {
     return interaction.editReply({ content: `Purchased **${item.name}** for **${number(item.price)} miles**.` });
   }
   if (interaction.isButton() && type === 'shop' && action === 'back') {
-    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can return to this dashboard.', ephemeral: true });
+    if (id !== interaction.user.id) return interaction.reply({ content: 'Only the account owner can return to this dashboard.', flags: MessageFlags.Ephemeral });
     await interaction.deferUpdate();
-    const account = await database.getAccount(id);
+    let account = await database.getAccount(id);
     if (!account) return interaction.editReply({ content: 'You do not have a Skywards account yet. Use `/account create` first.' });
-    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(id, account.tier) });
+    account = await reconcileTier(interaction.guild ? interaction.member : null, account);
+    return interaction.editReply({ ...accountMessage(account, await database.getInventory(id)), components: accountComponents(account) });
   }
   return null;
 }
@@ -338,13 +395,14 @@ async function respondError(interaction, error) {
   console.error('Interaction failed:', error);
   const content = error?.message || 'Something went wrong while processing that command. Check the bot logs for details.';
   if (interaction.deferred || interaction.replied) await interaction.editReply({ content, embeds: [], components: [] }).catch(() => {});
-  else await interaction.reply({ content, ephemeral: true }).catch(() => {});
+  else await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      await interaction.deferReply({ ephemeral: !isPublicCommand(interaction) });
+      if (isPublicCommand(interaction)) await interaction.deferReply();
+      else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const payload = await handleCommand(interaction);
       if (payload.eventToSaveId) {
         const eventId = payload.eventToSaveId;
