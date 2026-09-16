@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 const crypto = require('node:crypto');
-const { SHOP_COOLDOWN_HOURS } = require('./config');
+const { SHOP_COOLDOWN_HOURS, TIERS } = require('./config');
 
 function normalizeDatabaseUrl(value) {
   if (value.startsWith('postgres://')) return `postgresql://${value.slice('postgres://'.length)}`;
@@ -144,8 +144,25 @@ class Database {
     throw new Error('Could not generate a unique Skywards number.');
   }
 
+  assertValidTier(tier) {
+    if (!TIERS.includes(tier)) throw new Error(`Unknown Skywards tier: ${tier}`);
+  }
+
   async updateTier(userId, tier) {
+    this.assertValidTier(tier);
     await this.pool.query('UPDATE accounts SET tier = $1 WHERE user_id = $2', [tier, String(userId)]);
+  }
+
+  async upgradeTier(userId, nextTier, minimumMiles) {
+    this.assertValidTier(nextTier);
+    return this.transaction(async (client) => {
+      const { rows } = await client.query('SELECT miles FROM accounts WHERE user_id = $1 FOR UPDATE', [String(userId)]);
+      if (!rows.length) return { status: 'missing_account', miles: 0 };
+      const miles = Number(rows[0].miles);
+      if (miles < minimumMiles) return { status: 'insufficient_miles', miles };
+      await client.query('UPDATE accounts SET tier = $1 WHERE user_id = $2', [nextTier, String(userId)]);
+      return { status: 'upgraded', miles };
+    });
   }
 
   async addMiles(userId, miles) {

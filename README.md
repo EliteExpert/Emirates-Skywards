@@ -11,16 +11,31 @@ The tier artwork supplied for this project is stored in `assets/tiers/` and is u
 
 ## Features
 
-- `/account create` creates a member account with a generated Skywards number.
+- `/account create` creates a member account with a generated Skywards number and assigns the Discord role for the starting tier (Blue).
 - `/account view` shows the account card, balance, tier artwork, status bonus, and owned perks.
-- `/account inventory` shows purchased perks.
-- `/account set-tier` lets staff update a member's tier.
+- `/account inventory` re-checks the member's tier roles first, syncs the stored tier, then shows purchased perks.
+- `/account set-tier` lets staff update a member's tier; the matching tier role is applied to the member automatically.
 - `/account add-miles` lets staff grant miles.
 - `/flights-list` lists recent flights and events, including native Discord scheduled events created by anyone.
 - `/flight-awards` reads the interested members for the supplied flight or event ID and awards each attendee personalized miles.
 - `/shop` displays interactive purchase buttons for PTFS perks publicly.
 
 Each shop item has an independent **48-hour cooldown per member**. The shop shows the remaining time and disables an item until it becomes available again.
+
+## Tiers and upgrades
+
+Skywards tiers follow the official minimum mile thresholds:
+
+| Tier | Minimum available miles |
+| --- | ---: |
+| Blue | 0 |
+| Silver | 1,500 |
+| Gold | 3,500 |
+| Platinum | 7,000 |
+
+The account dashboard's **Upgrade** button only advances a member to the next tier once their available miles reach the next tier's threshold; the button is disabled until then and the upgrade is re-verified server-side. Staff can still set any tier directly with `/account set-tier`.
+
+The bot keeps Discord roles and stored tiers in sync: the starting tier role is granted when the account is created, tier changes (upgrade or staff set-tier) reapply the correct role and remove stale tier roles, and `/account inventory` and `/account view` re-check the member's tier roles before displaying anything. For flight awards, a member's tier roles take priority over the stored tier, falling back to the stored tier when no tier role is present.
 
 Administrative commands (`/account set-tier`, `/account add-miles`, and `/flight-awards`) require the Discord **Administrator** permission or one of these staff roles: `<@&1416276747246244013>`, `<@&1464239438183010469>`, or `<@&1473279339817730170>`.
 
@@ -57,7 +72,7 @@ Reference: [Emirates Earn Miles](https://www.emirates.com/us/english/skywards/ea
 ## Setup
 
 1. Create a Discord application and bot in the Discord Developer Portal.
-2. Enable the `applications.commands` scope when inviting the bot to your server.
+2. Enable the `applications.commands` scope when inviting the bot to your server, and grant it the **Manage Roles** permission. Position the bot's role **above** the Skywards tier roles so it can grant and remove them; otherwise tier role sync fails gracefully and the bot logs a warning.
 3. Copy `.env.example` to `.env` and set `DISCORD_TOKEN`.
 4. Optionally set `TEST_GUILD_ID` to sync commands instantly to one development server. In test-guild mode, commands are guild-only and old global copies are cleared to prevent duplicate command entries. Without it, commands sync globally and may take time to appear.
 5. Install and run with Node.js 20 or newer:
@@ -78,6 +93,6 @@ The bot reads native Discord scheduled events created by other users. Enable the
 
 ## Staff workflow
 
-1. A member runs `/account create`.
+1. A member runs `/account create`; the bot creates the account and grants the Blue tier role.
 2. Members use Discord's native **Interested** control on a flight or event. Native Discord events created by any member are discoverable through `/flights-list`.
 3. Staff run `/flight-awards event_id` to preview the role-based awards, then run it again with `confirm:True` once the flight or event is complete. For native Discord events, the base award defaults to 1,000 miles.
